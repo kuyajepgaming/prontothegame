@@ -1,6 +1,45 @@
 (function(){
 const params=new URLSearchParams(location.search),room=params.get('room'),token=params.get('host'),isHost=!!token;
 if(!room)return;
+
+// Try playing the title music as soon as the remote player display loads.
+// Browsers may reject audible autoplay until the visitor interacts with this page.
+if(!isHost && params.get('view')==='player'){
+ const music=document.getElementById('backgroundMusic');
+ const playButton=document.getElementById('musicPlay');
+ const stopButton=document.getElementById('musicStop');
+ const status=document.getElementById('musicStatus');
+ if(music){
+  music.loop=true;
+  let intentionallyStopped=false,starting=false,started=false;
+  const enable=document.createElement('button');
+  enable.type='button';enable.textContent='▶ Enable Music';
+  enable.setAttribute('aria-label','Enable background music');
+  enable.style.cssText='position:fixed;right:16px;bottom:82px;z-index:1001;padding:10px 14px;border-radius:9px;background:#ffca54;color:#061736;border:0;font-weight:800;cursor:pointer;box-shadow:0 4px 20px #0009;display:none';
+  document.body.appendChild(enable);
+  async function tryStart(){
+   if(intententionallyStopped||started||starting||!music.paused)return;
+   starting=true;
+   try{
+    const value=Number(document.getElementById('playerVolume')?.value||45);
+    music.volume=Math.max(0,Math.min(1,value/100));
+    await music.play();started=true;enable.style.display='none';
+    if(typeof updateMusicStatus==='function'){musicPlaying=true;updateMusicStatus()}
+   }catch(e){
+    if(!intentionallyStopped){enable.style.display='block';if(status)status.textContent='Tap Enable Music'}
+   }finally{starting=false}
+  }
+  enable.addEventListener('click',()=>{intentionallyStopped=false;started=false;tryStart()});
+  stopButton?.addEventListener('click',()=>{intentionallyStopped=true;started=false;enable.style.display='none'});
+  playButton?.addEventListener('click',()=>{intentionallyStopped=false;started=true;enable.style.display='none'});
+  // Browsers allow sound after an explicit click/touch/keyboard gesture.
+  const unlock=()=>{if(!intentionallyStopped&&!started)tryStart()};
+  document.addEventListener('pointerdown',unlock,{capture:true});
+  document.addEventListener('keydown',unlock,{capture:true});
+  window.addEventListener('pageshow',tryStart);
+  tryStart();
+ }
+}
 const socket=io({reconnection:true});let lobby=[];
 const section=document.createElement('section');section.id='onlineLobby';
 section.style='background:#101f40;border:1px solid #4866a1;border-radius:14px;padding:15px;margin-bottom:15px;color:white';
