@@ -40,6 +40,30 @@ if(!isHost && params.get('view')==='player'){
   tryStart();
  }
 }
+
+/* Enable buzzer audio silently on normal user interaction; no separate button. */
+(function setupBuzzerAudio(){
+ const old=[...document.querySelectorAll('button')].find(b=>/enable buzzer sound/i.test(b.textContent||''));
+ if(old)old.remove();
+ const audio=document.getElementById('wrongAudio');
+ if(!audio)return;
+ audio.preload='auto';
+ let unlocked=false;
+ const unlock=()=>{
+  if(unlocked)return;
+  const previousVolume=audio.volume;
+  audio.volume=0;
+  try{
+   const p=audio.play();
+   if(p&&typeof p.then==='function')p.then(()=>{
+    audio.pause();audio.currentTime=0;audio.volume=previousVolume;unlocked=true;
+   }).catch(()=>{audio.volume=previousVolume});
+  }catch(e){audio.volume=previousVolume}
+ };
+ document.addEventListener('pointerdown',unlock,{capture:true});
+ document.addEventListener('keydown',unlock,{capture:true});
+ window.addEventListener('message',e=>{if(e.origin===location.origin&&e.data?.type==='pronto-unlock-buzzer')unlock()});
+})();
 const socket=io({reconnection:true});let lobby=[];
 const playerKey='pronto-room-'+room, registeredPlayerId=!isHost?localStorage.getItem(playerKey):null;
 const personalPlayer=!isHost&&!!registeredPlayerId;
