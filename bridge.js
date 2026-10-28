@@ -18,22 +18,22 @@ if(!isHost && params.get('view')==='player'){
   enable.style.cssText='position:fixed;right:16px;bottom:82px;z-index:1001;padding:10px 14px;border-radius:9px;background:#ffca54;color:#061736;border:0;font-weight:800;cursor:pointer;box-shadow:0 4px 20px #0009;display:none';
   document.body.appendChild(enable);
   async function tryStart(){
-   if(intententionallyStopped||started||starting||!music.paused)return;
+   if(window.prontoHostMusicStopped||intentionallyStopped||started||starting||!music.paused)return;
    starting=true;
    try{
-    const value=Number(document.getElementById('playerVolume')?.value||45);
+    const value=window.prontoHostMusicVolume ?? Number(document.getElementById('playerVolume')?.value||45);
     music.volume=Math.max(0,Math.min(1,value/100));
     await music.play();started=true;enable.style.display='none';
     if(typeof updateMusicStatus==='function'){musicPlaying=true;updateMusicStatus()}
    }catch(e){
-    if(!intentionallyStopped){enable.style.display='block';if(status)status.textContent='Tap Enable Music'}
+    if(!intentionallyStopped&&!window.prontoHostMusicStopped){enable.style.display='block';if(status)status.textContent='Tap Enable Music'}
    }finally{starting=false}
   }
   enable.addEventListener('click',()=>{intentionallyStopped=false;started=false;tryStart()});
   stopButton?.addEventListener('click',()=>{intentionallyStopped=true;started=false;enable.style.display='none'});
-  playButton?.addEventListener('click',()=>{intentionallyStopped=false;started=true;enable.style.display='none'});
+  playButton?.addEventListener('click',()=>{if(window.prontoHostMusicStopped)return;intentionallyStopped=false;started=true;enable.style.display='none'});
   // Browsers allow sound after an explicit click/touch/keyboard gesture.
-  const unlock=()=>{if(!intentionallyStopped&&!started)tryStart()};
+  const unlock=()=>{if(!window.prontoHostMusicStopped&&!intentionallyStopped&&!started)tryStart()};
   document.addEventListener('pointerdown',unlock,{capture:true});
   document.addEventListener('keydown',unlock,{capture:true});
   window.addEventListener('pageshow',tryStart);
@@ -98,6 +98,62 @@ if(isHost){
  socket.on('gameSync',d=>receiveSync(d));socket.on('gameStrike',d=>showStrike(d.count));
 }
 
+// Host-authoritative room music controls; only background music is affected, not buzzers or strikes.
+const roomMusic=document.getElementById('backgroundMusic');
+function applyRoomMusic(m){
+ if(!m)return;
+ const level=Math.max(0,Math.min(100,Number(m.volume) || 0));
+ window.prontoHostMusicVolume=level;
+ window.prontoHostMusicStopped=!m.playing;
+ if(roomMusic)roomMusic.volume=level/100;
+ if(!isHost){
+  const playerSlider=document.getElementById('playerVolume');
+  if(playerSlider){playerSlider.value=String(level);playerSlider.disabled=true;playerSlider.title='Volume controlled by host';}
+  const playerPlay=document.getElementById('musicPlay');
+  if(playerPlay){playerPlay.disabled=!m.playing;playerPlay.title=m.playing?'':'Music stopped by host';}
+  if(!m.playing){
+   roomMusic?.pause();
+   const enable=[...document.querySelectorAll('button')].find(b=>b.textContent==='▶ Enable Music');
+   if(enable)enable.style.display='none';
+  }else if(roomMusic?.paused){
+   // Autoplay may be blocked until the player interacts with their browser.
+   roomMusic.play().catch(()=>{});
+  }
+ }
+ if(isHost){
+  const v=document.getElementById('hostMusicVolume'),n=document.getElementById('hostMusicPercent'),s=document.getElementById('hostMusicStatus');
+  if(v)v.value=String(level);
+  if(n)n.textContent=level+'%';
+  if(s)s.textContent=m.playing?'Playing for players':'Stopped for everyone';
+ }
+}
+if(!isHost){
+ // Even local player controls cannot restart music while the host has stopped it.
+ document.getElementById('musicPlay')?.addEventListener('click',e=>{
+  if(window.prontoHostMusicStopped){e.preventDefault();e.stopImmediatePropagation();roomMusic?.pause();}
+ },true);
+ roomMusic?.addEventListener('play',()=>{if(window.prontoHostMusicStopped)roomMusic.pause()});
+}
+if(isHost){
+ const panel=document.createElement('section');
+ panel.id='hostMusicPanel';
+ panel.style.cssText='background:#101f40;border:1px solid #4866a1;border-radius:14px;padding:15px;margin:12px 0;color:white';
+ panel.innerHTML='<h3 style="margin:0 0 10px;color:#ffcf58">PLAYER BACKGROUND MUSIC</h3><label for="hostMusicVolume" style="display:flex;justify-content:space-between;gap:12px;font-weight:700">All-player volume <span id="hostMusicPercent">45%</span></label><input type="range" id="hostMusicVolume" min="0" max="100" value="45" style="width:100%;margin:12px 0;accent-color:#ffce58"><div style="display:flex;flex-wrap:wrap;gap:8px"><button class="btn primary" id="hostMusicPlay">▶ Play / Resume All</button><button class="btn" id="hostMusicStop">■ Stop All</button></div><p id="hostMusicStatus" style="font-size:12px;color:#c6d9f6;margin:10px 0 0">Connecting…</p>';
+ section.appendChild(panel);
+ let volumeTimer=null;
+ const submitVolume=()=>{
+  socket.emit('musicControl',{action:'volume',volume:Number(document.getElementById('hostMusicVolume').value)},r=>{if(r?.error)alert(r.error)});
+ };
+ document.getElementById('hostMusicVolume').addEventListener('input',e=>{
+  document.getElementById('hostMusicPercent').textContent=e.target.value+'%';
+  clearTimeout(volumeTimer);volumeTimer=setTimeout(submitVolume,100);
+ });
+ document.getElementById('hostMusicVolume').addEventListener('change',()=>{clearTimeout(volumeTimer);submitVolume()});
+ document.getElementById('hostMusicPlay').onclick=()=>socket.emit('musicControl',{action:'play'},r=>{if(r?.error)alert(r.error)});
+ document.getElementById('hostMusicStop').onclick=()=>socket.emit('musicControl',{action:'stop'},r=>{if(r?.error)alert(r.error)});
+}
+socket.on('musicState',applyRoomMusic);
+
 const buzzerPanel=document.createElement('section');
 buzzerPanel.style.cssText='background:#101f40;border:1px solid #4866a1;border-radius:14px;padding:15px;margin:12px 0;color:white';
 if(isHost){
@@ -158,6 +214,6 @@ dock.style.clear='both';
 }
 socket.on('buzzerState',updateBuzzer);
 socket.on('connect',()=>socket.emit('enter',{room,host:token,view:isHost?'host':personalPlayer?'participant':'display',playerId:personalPlayer?registeredPlayerId:undefined},res=>{
- if(res.error){alert(res.error);return}if(personalPlayer&&!res.playerId){location.replace('/join/'+room);return}if(res.buzzer){updateBuzzer(res.buzzer);if(personalPlayer)window.applyPersonalBuzzer(res.buzzer)}if(!isHost&&res.snapshot)receiveSync(res.snapshot);if(isHost)broadcast();
+ if(res.error){alert(res.error);return}if(personalPlayer&&!res.playerId){location.replace('/join/'+room);return}if(res.music)applyRoomMusic(res.music);if(res.buzzer){updateBuzzer(res.buzzer);if(personalPlayer)window.applyPersonalBuzzer(res.buzzer)}if(!isHost&&res.snapshot)receiveSync(res.snapshot);if(isHost)broadcast();
 }));
 })();
