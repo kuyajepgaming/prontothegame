@@ -41,6 +41,8 @@ if(!isHost && params.get('view')==='player'){
  }
 }
 const socket=io({reconnection:true});let lobby=[];
+const playerKey='pronto-room-'+room, registeredPlayerId=!isHost?localStorage.getItem(playerKey):null;
+const personalPlayer=!isHost&&!!registeredPlayerId;
 const section=document.createElement('section');section.id='onlineLobby';
 section.style='background:#101f40;border:1px solid #4866a1;border-radius:14px;padding:15px;margin-bottom:15px;color:white';
 if(isHost){
@@ -99,8 +101,29 @@ function updateBuzzer(b){
   buzzerPanel.append(tag,winner,count);buzzerPanel.style.display='block';
  }
 }
+// A registered player watches the same game board and buzzes directly on it.
+if(personalPlayer){
+ const dock=document.createElement('div');dock.id='personalBuzzDock';
+ dock.style.cssText='position:fixed;left:50%;bottom:12px;transform:translateX(-50%);z-index:1100;width:min(370px,92vw);padding:10px 14px;border-radius:16px;background:#081c40ed;border:2px solid #ffce58;box-shadow:0 9px 35px #000a;display:flex;align-items:center;gap:10px;color:white';
+ const btn=document.createElement('button');btn.id='personalBuzz';btn.textContent='BUZZER LOCKED';
+ btn.style.cssText='background:#db334e;color:white;border:0;border-radius:12px;font-size:20px;font-weight:900;padding:15px 22px;flex:1;cursor:pointer';
+ const info=document.createElement('span');info.id='personalBuzzInfo';info.style.cssText='font-size:12px;max-width:110px;line-height:1.3';info.textContent='Waiting for host';
+ dock.append(btn,info);document.body.appendChild(dock);
+ let personalBuzzer={open:false,entries:[]},pending=false;
+ function renderPersonalBuzz(){
+  const mine=(personalBuzzer.entries||[]).find(x=>x.id===registeredPlayerId);
+  btn.disabled=pending||!personalBuzzer.open||!!mine;
+  btn.style.opacity=btn.disabled?'.55':'1';
+  btn.textContent=mine?'BUZZED #'+mine.rank:personalBuzzer.open?'🔴 BUZZ!':'BUZZER LOCKED';
+  info.textContent=mine?(mine.rank===1?'First to buzz!':'Your rank: #'+mine.rank):personalBuzzer.open?'Tap now!':'Waiting for host';
+ }
+ btn.onclick=()=>{if(btn.disabled)return;pending=true;renderPersonalBuzz();socket.emit('buzz',{},r=>{pending=false;if(r?.error)info.textContent=r.error;renderPersonalBuzz()})};
+ socket.on('buzzerState',b=>{personalBuzzer=b;renderPersonalBuzz()});
+ socket.on('connect',()=>{pending=false;renderPersonalBuzz()});
+ window.applyPersonalBuzzer=b=>{personalBuzzer=b;renderPersonalBuzz()};
+}
 socket.on('buzzerState',updateBuzzer);
-socket.on('connect',()=>socket.emit('enter',{room,host:token,view:isHost?'host':'display'},res=>{
- if(res.error){alert(res.error);return}if(res.buzzer)updateBuzzer(res.buzzer);if(!isHost&&res.snapshot)receiveSync(res.snapshot);if(isHost)broadcast();
+socket.on('connect',()=>socket.emit('enter',{room,host:token,view:isHost?'host':personalPlayer?'participant':'display',playerId:personalPlayer?registeredPlayerId:undefined},res=>{
+ if(res.error){alert(res.error);return}if(personalPlayer&&!res.playerId){location.replace('/join/'+room);return}if(res.buzzer){updateBuzzer(res.buzzer);if(personalPlayer)window.applyPersonalBuzzer(res.buzzer)}if(!isHost&&res.snapshot)receiveSync(res.snapshot);if(isHost)broadcast();
 }));
 })();
