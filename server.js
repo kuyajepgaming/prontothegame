@@ -14,6 +14,7 @@ const summary=r=>({code:r.code,participants:[...r.players.values()].map(({id,nam
 function emitLobby(r){io.to('room:'+r.code).emit('lobby',summary(r));}
 app.post('/api/rooms',(req,res)=>{let c=code();while(rooms.has(c))c=code();const token=crypto.randomBytes(32).toString('hex');rooms.set(c,{code:c,token,players:new Map(),hostSocket:null,snapshot:null,created:Date.now()});res.json({code:c,hostUrl:`/game?room=${c}&host=${token}`,joinUrl:`/join/${c}`,displayUrl:`/game?room=${c}&view=player`});});
 app.get('/api/rooms/:code',(req,res)=>{const r=rooms.get(req.params.code.toUpperCase());if(!r)return res.status(404).json({error:'Room not found'});res.json({code:r.code,open:true,hostOnline:!!r.hostSocket});});
+app.get('/bridge.js',(req,res)=>res.type('application/javascript').sendFile(path.join(__dirname,'bridge.js')));
 app.get('/join/:code',(req,res)=>res.sendFile(path.join(__dirname,'public','join.html')));
 app.get('/game',(req,res)=>res.sendFile(path.join(__dirname,'public','game.html')));
 app.use(express.static(path.join(__dirname,'public')));
