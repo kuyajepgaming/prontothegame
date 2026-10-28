@@ -71,7 +71,36 @@ if(isHost){
  const switchBtn=document.getElementById('switchViewBtn');if(switchBtn)switchBtn.style.display='none';
  socket.on('gameSync',d=>receiveSync(d));socket.on('gameStrike',d=>showStrike(d.count));
 }
+
+const buzzerPanel=document.createElement('section');
+buzzerPanel.style.cssText='background:#101f40;border:1px solid #4866a1;border-radius:14px;padding:15px;margin:12px 0;color:white';
+if(isHost){
+ buzzerPanel.innerHTML='<h3 style="color:#ffcf58;margin:0 0 10px">LIVE PLAYER BUZZERS</h3><div id="buzzControls" style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn primary" id="buzzOpen">Open Buzzers</button><button class="btn" id="buzzLock">Lock</button><button class="btn" id="buzzReset">Reset Buzzers</button></div><p id="buzzInfo">Buzzers locked</p><div id="buzzRankList" style="max-height:260px;overflow:auto"></div>';
+ section.appendChild(buzzerPanel);
+ ['open','lock','reset'].forEach(action=>{document.getElementById('buzz'+action[0].toUpperCase()+action.slice(1)).onclick=()=>socket.emit('buzzerControl',{action},r=>{if(r?.error)alert(r.error)})});
+}else{
+ buzzerPanel.id='buzzWinnerOverlay';
+ buzzerPanel.style.cssText='position:fixed;left:50%;top:12%;transform:translateX(-50%);width:min(640px,85vw);z-index:999;background:#091936ed;border:4px solid #ffce58;box-shadow:0 12px 45px #000b;border-radius:20px;padding:18px;text-align:center;color:white;display:none;pointer-events:none';
+ document.body.appendChild(buzzerPanel);
+}
+function updateBuzzer(b){
+ const list=Array.isArray(b?.entries)?b.entries:[];
+ if(isHost){
+  document.getElementById('buzzInfo').textContent=(b.open?'Buzzers OPEN':'Buzzers LOCKED')+' · '+list.length+' player(s) buzzed';
+  const container=document.getElementById('buzzRankList');container.replaceChildren();
+  if(!list.length){container.textContent='No buzzes yet.';return}
+  list.forEach((p,i)=>{const line=document.createElement('div');line.style.cssText='padding:9px;border-bottom:1px solid #34476e;font-weight:'+(i===0?'900':'500')+';color:'+(i===0?'#ffce58':'white');line.textContent='#'+(i+1)+'  '+p.name+'  ·  '+(p.team===null?'Unassigned':'Team '+(p.team+1))+'  ·  '+(p.elapsedMs/1000).toFixed(2)+'s';container.appendChild(line)});
+ }else{
+  if(!list.length){buzzerPanel.style.display='none';buzzerPanel.replaceChildren();return}
+  buzzerPanel.replaceChildren();
+  const tag=document.createElement('div');tag.textContent='⚡ FIRST TO BUZZ ⚡';tag.style.cssText='font-size:17px;color:#ffce58;letter-spacing:2px;font-weight:800';
+  const winner=document.createElement('div');winner.textContent=list[0].name;winner.style.cssText='font-size:clamp(28px,4vw,58px);font-weight:1000;margin:8px';
+  const count=document.createElement('div');count.textContent=list.length+' player(s) buzzed';count.style.cssText='font-size:13px;color:#c4d6f4';
+  buzzerPanel.append(tag,winner,count);buzzerPanel.style.display='block';
+ }
+}
+socket.on('buzzerState',updateBuzzer);
 socket.on('connect',()=>socket.emit('enter',{room,host:token,view:isHost?'host':'display'},res=>{
- if(res.error){alert(res.error);return}if(!isHost&&res.snapshot)receiveSync(res.snapshot);if(isHost)broadcast();
+ if(res.error){alert(res.error);return}if(res.buzzer)updateBuzzer(res.buzzer);if(!isHost&&res.snapshot)receiveSync(res.snapshot);if(isHost)broadcast();
 }));
 })();
