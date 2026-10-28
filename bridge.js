@@ -128,11 +128,21 @@ function updateBuzzer(b){
 // A registered player watches the same game board and buzzes directly on it.
 if(personalPlayer){
  const dock=document.createElement('div');dock.id='personalBuzzDock';
- dock.style.cssText='position:fixed;left:50%;bottom:12px;transform:translateX(-50%);z-index:1100;width:min(370px,92vw);padding:10px 14px;border-radius:16px;background:#081c40ed;border:2px solid #ffce58;box-shadow:0 9px 35px #000a;display:flex;align-items:center;gap:10px;color:white';
+ dock.style.cssText='position:relative;z-index:1;width:min(370px,92vw);margin:16px auto 76px;padding:10px 14px;border-radius:16px;background:#081c40ed;border:2px solid #ffce58;box-shadow:0 5px 20px #0005;display:flex;align-items:center;gap:10px;color:white';
  const btn=document.createElement('button');btn.id='personalBuzz';btn.textContent='BUZZER LOCKED';
  btn.style.cssText='background:#db334e;color:white;border:0;border-radius:12px;font-size:20px;font-weight:900;padding:15px 22px;flex:1;cursor:pointer';
  const info=document.createElement('span');info.id='personalBuzzInfo';info.style.cssText='font-size:12px;max-width:110px;line-height:1.3';info.textContent='Waiting for host';
- dock.append(btn,info);document.body.appendChild(dock);
+ dock.append(btn,info);
+// Place the personal buzzer in the page flow after the timer, never over it.
+const timerLabel=[...document.querySelectorAll('span,div,p,strong')].find(el=>el.children.length===0&&/TIME REMAINING/i.test(el.textContent||''));
+if(timerLabel){
+ const timerRow=timerLabel.parentElement;
+ timerRow?.insertAdjacentElement('afterend',dock);
+}else{
+ document.body.appendChild(dock);
+}
+// Keep space beneath the control for the bottom-right music controls.
+dock.style.clear='both';
  let personalBuzzer={open:false,entries:[]},pending=false;
  function renderPersonalBuzz(){
   const mine=(personalBuzzer.entries||[]).find(x=>x.id===registeredPlayerId);
