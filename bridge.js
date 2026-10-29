@@ -156,6 +156,94 @@ dock.style.clear='both';
  socket.on('connect',()=>{pending=false;renderPersonalBuzz()});
  window.applyPersonalBuzzer=b=>{personalBuzzer=b;renderPersonalBuzz()};
 }
+
+if(isHost){
+ const sidebar=document.querySelector('.sidebar');
+ if(sidebar){
+  const css=document.createElement('style');
+  css.textContent='#hostLayoutOpen{position:fixed;top:12px;right:16px;z-index:1200;background:#ffce58;color:#0b1e41;border:0;border-radius:9px;padding:12px;font-weight:900;cursor:pointer}#hostLayoutWorkspace{position:fixed;inset:0;z-index:2000;background:#06142ffb;color:white;overflow:auto;padding:16px 24px 60px;font-family:system-ui,sans-serif}#hostLayoutWorkspace[hidden]{display:none}#hostLayoutTop{position:sticky;top:-16px;background:#071a38;z-index:5;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px;border-bottom:1px solid #5277a0}#hostLayoutTop button{background:#ffce58;color:#102344;border:0;border-radius:8px;padding:9px 13px;font-weight:800;cursor:pointer}#hostLayoutRows{display:flex;flex-direction:column;gap:12px;margin:16px auto;max-width:1800px}.host-layout-row{display:flex;gap:12px;min-height:130px;align-items:stretch}.host-layout-tile{position:relative;background:#0b2248;border:1px solid #426ba3;border-radius:13px;min-width:190px;min-height:130px;display:flex;flex-direction:column;overflow:hidden}.host-layout-handle{background:#173868;color:#ffce58;cursor:grab;padding:10px 12px;font-weight:900;display:flex;gap:8px;align-items:center;user-select:none}.host-layout-handle span{flex:1}.host-layout-content{padding:10px;overflow:auto;flex:1;min-height:50px}.host-layout-content>*{max-width:100%!important;box-sizing:border-box}.host-layout-grip{position:absolute;right:0;bottom:0;width:22px;height:22px;z-index:3;cursor:nwse-resize;background:linear-gradient(135deg,transparent 45%,#ffce58 48%,#ffce58 60%,transparent 62%)}.host-layout-tile[data-drop]{outline:3px solid #ffce58;outline-offset:-3px}@media(max-width:650px){#hostLayoutWorkspace{padding:8px}.host-layout-row{flex-direction:column}.host-layout-tile{width:100%!important;flex:auto!important;min-width:0}#hostLayoutTop{top:-8px}}';
+  document.head.appendChild(css);
+  const workspace=document.createElement('div');workspace.id='hostLayoutWorkspace';workspace.hidden=true;
+  workspace.innerHTML='<div id="hostLayoutTop"><strong style="font-size:20px;color:#ffce58">☷ Customize Host Panels</strong><div><button id="hostLayoutReset">Reset Layout</button> <button id="hostLayoutClose">Back to Game ✕</button></div></div><p style="color:#bbcfed">Drag a panel header to an edge of another panel: left/right shares a row, top/bottom creates a row. Drag the gold bottom-right corner to resize the panel. Layout is saved automatically.</p><div id="hostLayoutRows"></div>';
+  document.body.appendChild(workspace);
+  const open=document.createElement('button');open.id='hostLayoutOpen';open.textContent='☷ Customize Host Panels';document.body.appendChild(open);
+  const root=workspace.querySelector('#hostLayoutRows'),originals=new Map(),storageKey='pronto-host-layout-v1';
+  let rows=[],sizes={},dragged=null,initialized=false;
+  function save(){try{localStorage.setItem(storageKey,JSON.stringify({rows,sizes}))}catch(e){}}
+  function setup(){
+   if(initialized)return;initialized=true;
+   [...sidebar.children].filter(el=>el.nodeType===1).forEach((el,i)=>{
+    const id='panel-'+i,marker=document.createComment(id);
+    el.parentNode.insertBefore(marker,el);
+    const heading=el.querySelector('h2,h3,h4,legend,.panel-title');
+    originals.set(id,{el,marker,title:(heading?.textContent||el.id||'Host Controls '+(i+1)).trim().slice(0,70)});
+   });
+   const ids=[...originals.keys()];
+   try{
+    const saved=JSON.parse(localStorage.getItem(storageKey)||'{}'),seen=new Set();
+    rows=(saved.rows||[]).map(row=>Array.isArray(row)?row.filter(id=>ids.includes(id)&&!seen.has(id)&&seen.add(id)):[]).filter(row=>row.length);
+    if(saved.sizes&&typeof saved.sizes==='object')sizes=saved.sizes;
+   }catch(e){}
+   ids.filter(id=>!rows.some(row=>row.includes(id))).forEach(id=>rows.push([id]));
+  }
+  function locate(tile,event){
+   const r=tile.getBoundingClientRect(),x=(event.clientX-r.left)/r.width,y=(event.clientY-r.top)/r.height;
+   if(y<.25)return'top';if(y>.75)return'bottom';return x<.5?'left':'right';
+  }
+  function move(source,target,edge){
+   if(source===target)return;
+   rows=rows.map(row=>row.filter(id=>id!==source)).filter(row=>row.length);
+   const ri=rows.findIndex(row=>row.includes(target));
+   if(ri<0){rows.push([source])}
+   else if(edge==='top'||edge==='bottom'){rows.splice(ri+(edge==='bottom'?1:0),0,[source])}
+   else{const pos=rows[ri].indexOf(target);rows[ri].splice(pos+(edge==='right'?1:0),0,source)}
+   save();render();
+  }
+  function render(){
+   root.replaceChildren();
+   rows.forEach(row=>{
+    const rowEl=document.createElement('div');rowEl.className='host-layout-row';
+    row.forEach(id=>{
+     const data=originals.get(id);if(!data)return;
+     const tile=document.createElement('article');tile.className='host-layout-tile';tile.dataset.id=id;
+     tile.style.height=Math.max(130,Number(sizes[id]?.height)||260)+'px';
+     tile.style.flex=(Math.max(15,Number(sizes[id]?.width)||50))+' 1 0%';
+     const handle=document.createElement('div');handle.className='host-layout-handle';handle.draggable=true;
+     const title=document.createElement('span');title.textContent='⠿  '+data.title;
+     handle.appendChild(title);
+     handle.addEventListener('dragstart',e=>{dragged=id;e.dataTransfer.setData('text/plain',id);e.dataTransfer.effectAllowed='move'});
+     handle.addEventListener('dragend',()=>{dragged=null;root.querySelectorAll('[data-drop]').forEach(el=>el.removeAttribute('data-drop'))});
+     tile.addEventListener('dragover',e=>{if(!dragged||dragged===id)return;e.preventDefault();tile.dataset.drop=locate(tile,e)});
+     tile.addEventListener('dragleave',e=>{if(!tile.contains(e.relatedTarget))tile.removeAttribute('data-drop')});
+     tile.addEventListener('drop',e=>{if(!dragged||dragged===id)return;e.preventDefault();move(dragged,id,locate(tile,e));dragged=null});
+     const content=document.createElement('div');content.className='host-layout-content';content.appendChild(data.el);
+     const grip=document.createElement('div');grip.className='host-layout-grip';grip.title='Resize panel width and height';
+     grip.addEventListener('pointerdown',e=>{
+      e.preventDefault();e.stopPropagation();const x=e.clientX,y=e.clientY,w=tile.getBoundingClientRect().width,h=tile.getBoundingClientRect().height,rowW=rowEl.getBoundingClientRect().width;
+      grip.setPointerCapture(e.pointerId);
+      function resize(ev){
+       sizes[id]={height:Math.max(130,Math.min(1500,h+ev.clientY-y)),width:Math.max(15,Math.min(300,100*(w+ev.clientX-x)/rowW))};
+       tile.style.height=sizes[id].height+'px';
+       tile.style.flex=sizes[id].width+' 1 0%';
+      }
+      function done(){grip.removeEventListener('pointermove',resize);grip.removeEventListener('pointerup',done);grip.removeEventListener('pointercancel',done);save();render()}
+      grip.addEventListener('pointermove',resize);grip.addEventListener('pointerup',done);grip.addEventListener('pointercancel',done);
+     });
+     tile.append(handle,content,grip);rowEl.appendChild(tile);
+    });
+    root.appendChild(rowEl);
+   });
+  }
+  function close(){
+   for(const {el,marker} of originals.values())marker.parentNode.insertBefore(el,marker.nextSibling);
+   workspace.hidden=true;open.hidden=false;
+  }
+  open.onclick=()=>{setup();workspace.hidden=false;open.hidden=true;render()};
+  workspace.querySelector('#hostLayoutClose').onclick=close;
+  workspace.querySelector('#hostLayoutReset').onclick=()=>{rows=[...originals.keys()].map(id=>[id]);sizes={};save();render()};
+ }
+}
+
 socket.on('buzzerState',b=>{soundOnNewBuzz(b);updateBuzzer(b)});
 socket.on('connect',()=>socket.emit('enter',{room,host:token,view:isHost?'host':personalPlayer?'participant':'display',playerId:personalPlayer?registeredPlayerId:undefined},res=>{
  if(res.error){alert(res.error);return}if(personalPlayer&&!res.playerId){location.replace('/join/'+room);return}if(res.buzzer){soundOnNewBuzz(res.buzzer);updateBuzzer(res.buzzer);if(personalPlayer)window.applyPersonalBuzzer(res.buzzer)}if(!isHost&&res.snapshot)receiveSync(res.snapshot);if(isHost)broadcast();
