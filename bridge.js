@@ -39,11 +39,12 @@ if(!room)return;
 })();
 // Synchronize the actual player scoreboard text after every game render.
 const baseTeamLabels=['Team Pronto','Team Pilates'];
-let syncedTeamLabels=baseTeamLabels.slice();
+let syncedTeamLabels=baseTeamLabels.slice(),previousTeamLabels=baseTeamLabels.slice();
 let paintingTeamLabels=false;
 function paintPlayerTeamNames(names){
  if(!Array.isArray(names)||names.length<2)return;
  const next=names.slice(0,2).map((v,i)=>String(v||baseTeamLabels[i]).trim());
+ const old=previousTeamLabels.slice();
  syncedTeamLabels=next;
  if(paintingTeamLabels)return;
  paintingTeamLabels=true;
@@ -51,28 +52,26 @@ function paintPlayerTeamNames(names){
   const walker=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);
   const changes=[];let node;
   while((node=walker.nextNode())){
-   const el=node.parentElement;
-   if(!el||el.closest('#liveTeamManagement,script,style,textarea,option')||el.closest('#ph-dashboard .ph-bar'))continue;
-   const value=node.nodeValue;
-   if(!value||!baseTeamLabels.some((s,i)=>value.includes(s)||value.includes(next[i])))continue;
-   // Each node keeps its original wording, so later game re-renders and
-   // subsequent renames cannot leave stale team names behind.
-   if(node._prontoTeamSource===undefined)node._prontoTeamSource=value;
-   let output=node._prontoTeamSource;
-   baseTeamLabels.forEach((name,i)=>{output=output.split(name).join(next[i])});
-   // If a panel was originally created while custom names were active,
-   // allow it to follow further renames as well.
-   if(output===node._prontoTeamSource&&!baseTeamLabels.some(name=>output.includes(name))){
-    const old=node._prontoLastNames||baseTeamLabels;
-    old.forEach((name,i)=>{output=output.split(name).join(next[i])});
+   const el=node.parentElement;if(!el||el.closest('script,style,textarea,option,#liveTeamManagement'))continue;
+   const value=node.nodeValue||'';
+   // Replace team names in scoreboard, scoring controls and other short UI labels,
+   // not member names, game questions, or user-edited inputs.
+   if(value.length>115)continue;
+   let updated=value;
+   const patterns=[baseTeamLabels,old,['Team A','Team B']];
+   for(const nameset of patterns){
+    nameset.forEach((name,i)=>{
+     if(name===next[i]||!name)return;
+     if(updated.trim()===name||updated.includes('Points to '+name)||updated.includes('+ Points to '+name))
+      updated=updated.split(name).join(next[i]);
+    });
    }
-   if(value!==output)changes.push([node,output]);
-   node._prontoLastNames=next.slice();
+   if(updated!==value)changes.push([node,updated]);
   }
   changes.forEach(([node,value])=>{node.nodeValue=value});
+  previousTeamLabels=next;
  }finally{paintingTeamLabels=false}
 }
-
 const socket=io({reconnection:true});let lobby=[];
 {const observer=new MutationObserver(()=>{if(!paintingTeamLabels)paintPlayerTeamNames(isHost&&Array.isArray(state?.teamNames)?state.teamNames:syncedTeamLabels)});observer.observe(document.body,{childList:true,subtree:true,characterData:true});}
 
