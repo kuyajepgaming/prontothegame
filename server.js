@@ -17,7 +17,18 @@ app.post('/api/rooms',(req,res)=>{let c=code();while(rooms.has(c))c=code();const
 app.get('/api/rooms/:code',(req,res)=>{const r=rooms.get(req.params.code.toUpperCase());if(!r)return res.status(404).json({error:'Room not found'});res.json({code:r.code,open:true,hostOnline:!!r.hostSocket});});
 app.get('/bridge.js',(req,res)=>res.type('application/javascript').sendFile(path.join(__dirname,'bridge.js')));
 app.get('/join/:code',(req,res)=>res.sendFile(path.join(__dirname,'public','join.html')));
-app.get('/game',(req,res)=>res.sendFile(path.join(__dirname,'public','game.html')));
+app.get('/game',(req,res)=>{
+ // Load the independently maintained host dashboard after the game document.
+ // Avoid editing the multi-megabyte game.html with embedded artwork/audio.
+ res.type('html');
+ const source=path.join(__dirname,'public','game.html');
+ const fs=require('fs');
+ fs.readFile(source,'utf8',(err,html)=>{
+  if(err)return res.status(500).send('Game not available');
+  if(req.query.host)html=html.replace(/<\/body>/i,'<script src="/host-dashboard.js?v=3"></script></body>');
+  res.send(html);
+ });
+});
 app.use(express.static(path.join(__dirname,'public')));
 io.on('connection',socket=>{
  let current=null,role=null,playerId=null;
