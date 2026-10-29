@@ -45,6 +45,40 @@ section.style='background:#101f40;border:1px solid #4866a1;border-radius:14px;pa
 if(isHost){
  const sidebar=document.querySelector('.sidebar');if(sidebar)sidebar.prepend(section);
  section.innerHTML='<h3 style="margin:0 0 8px;color:#ffcf58">LIVE ONLINE LOBBY</h3><div id="roomCode" style="font-size:20px;font-weight:900"></div><div style="font-size:12px;margin:10px 0">Player join link</div><input id="shareUrl" readonly style="width:100%;padding:8px;background:#0b1c3d;color:white;border:1px solid #5774a3;border-radius:7px"><div style="display:flex;gap:8px;margin:10px 0;flex-wrap:wrap"><button class="btn" id="copyJoin">Copy Join Link</button><button class="btn" id="copyDisplay">Copy Display Link</button></div><div id="joinedCount" style="font-weight:800;margin:12px 0">Waiting for players…</div><div id="livePool" style="max-height:230px;overflow:auto"></div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:12px"><button class="btn primary" id="randomPool">Randomly Assign Pool</button><button class="btn" id="clearAssignments">Return All to Pool</button></div><p style="font-size:11px;color:#afc1e5">Players appear here when they join. Choose a team or randomize unassigned players. Player names also appear in the existing Team Creator.</p>';
+ // Team roster and naming are controlled in the lobby.
+ const teamArea=document.createElement('div');teamArea.id='liveTeamManagement';
+ teamArea.style.cssText='margin:15px 0;padding:12px;border:1px solid #4866a1;border-radius:10px;background:#0b1c3d';
+ teamArea.innerHTML='<h3 style="margin:0 0 12px;color:#ffcf58">TEAMS & JOINED PLAYERS</h3><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(185px,1fr));gap:10px"><label style="font-size:12px">Team 1 name<input id="liveTeamName0" maxlength="45" style="width:100%;padding:8px;background:#122a54;color:white;border:1px solid #597bb1;border-radius:7px"></label><label style="font-size:12px">Team 2 name<input id="liveTeamName1" maxlength="45" style="width:100%;padding:8px;background:#122a54;color:white;border:1px solid #597bb1;border-radius:7px"></label></div><button class="btn primary" id="liveSaveTeamNames" style="margin:10px 0">Save Team Names</button><div id="liveTeamRoster" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px;margin-top:10px"></div>';
+ section.insertBefore(teamArea,document.getElementById('joinedCount'));
+ function teamNames(){
+  const array=Array.isArray(state.teamNames)?state.teamNames:Array.isArray(state.teams)?state.teams:null;
+  return [String(array?.[0]||'Team Pronto'),String(array?.[1]||'Team Pilates')];
+ }
+ function paintRoster(){
+  const names=teamNames(),roster=document.getElementById('liveTeamRoster');
+  roster.replaceChildren();
+  [0,1,-1].forEach(t=>{
+   const group=document.createElement('div');group.style.cssText='padding:9px;background:#112a54;border-radius:8px;border:1px solid #3a5784';
+   const heading=document.createElement('strong');heading.style.color='#ffce58';heading.textContent=t<0?'Unassigned':names[t];
+   group.appendChild(heading);
+   const people=lobby.filter(p=>{const i=state.players.findIndex(arr=>Array.isArray(arr)&&arr.some(member=>member.id===p.id));return i===t});
+   if(!people.length){const none=document.createElement('p');none.textContent='No players';none.style.cssText='font-size:12px;color:#b9cae9';group.appendChild(none)}
+   people.forEach(p=>{const item=document.createElement('div');item.style.cssText='padding:6px 0;display:flex;justify-content:space-between;gap:6px;align-items:center;border-bottom:1px solid #36517c';
+    const label=document.createElement('span');label.textContent=p.name+(p.connected?' ●':' ○');label.style.fontSize='12px';
+    const sel=document.createElement('select');sel.setAttribute('aria-label','Assign '+p.name+' to a team');sel.style.cssText='padding:4px;background:#102048;color:white;border:1px solid #426297;border-radius:5px;font-size:11px';
+    [[-1,'Pool'],[0,names[0]],[1,names[1]]].forEach(([v,n])=>{const opt=document.createElement('option');opt.value=v;opt.textContent=n;sel.appendChild(opt)});sel.value=String(t);
+    sel.onchange=()=>{const next=Number(sel.value);if(next<0){state.players.forEach(arr=>{const j=arr.findIndex(x=>x.id===p.id);if(j>=0)arr.splice(j,1)});render();paint()}else assign(p.id,next)};
+    item.append(label,sel);group.appendChild(item);
+   });roster.appendChild(group);
+  });
+ }
+ document.getElementById('liveSaveTeamNames').onclick=()=>{
+  const names=[0,1].map(i=>document.getElementById('liveTeamName'+i).value.trim().slice(0,45)||('Team '+(i+1)));
+  state.teamNames=names;
+  // Update common legacy team-name shapes so scoreboard and shared state use the same names.
+  if(Array.isArray(state.teams)&&state.teams.every(x=>typeof x==='string'))state.teams=[...names];
+  render();paint();broadcast();
+ };
  document.getElementById('roomCode').textContent='Room: '+room;
  const joinUrl=location.origin+'/join/'+room;
  document.getElementById('shareUrl').value=joinUrl;
@@ -52,7 +86,7 @@ if(isHost){
  document.getElementById('copyDisplay').onclick=()=>{const url=location.origin+'/game?room='+room+'&view=player';navigator.clipboard?.writeText(url).then(()=>toast('Display link copied')).catch(()=>prompt('Copy link:',url))};
  function pool(){ensureTeamState();const taken=new Set(state.players.flat().map(p=>p.id));return lobby.filter(p=>!taken.has(p.id))}
  function assign(id,t){const p=lobby.find(x=>x.id===id);if(!p)return;ensureTeamState();for(const arr of state.players){const j=arr.findIndex(x=>x.id===id);if(j>=0)arr.splice(j,1)}state.players[t].push({id:p.id,name:p.name});render();showTeamCreator();paint();}
- function paint(){ensureTeamState();const unassigned=pool();document.getElementById('joinedCount').textContent=`${lobby.length} joined · ${unassigned.length} unassigned · ${lobby.filter(p=>p.connected).length} online`;
+ function paint(){ensureTeamState();const names=teamNames();[0,1].forEach(i=>{const input=document.getElementById('liveTeamName'+i);if(input&&document.activeElement!==input)input.value=names[i]});paintRoster();const unassigned=pool();document.getElementById('joinedCount').textContent=`${lobby.length} joined · ${unassigned.length} unassigned · ${lobby.filter(p=>p.connected).length} online`;
  document.getElementById('livePool').innerHTML=unassigned.length?unassigned.map(p=>`<div style="padding:8px;border-bottom:1px solid #36517c;display:flex;align-items:center;gap:5px;flex-wrap:wrap"><span style="flex:1;min-width:85px">${escapeHTML(p.name)} ${p.connected?'●':'○'}</span><button class="btn" data-pool="${p.id}" data-team="0" title="Assign to Team 1">Team 1</button><button class="btn" data-pool="${p.id}" data-team="1" title="Assign to Team 2">Team 2</button><button class="btn danger" data-kick="${p.id}" title="Remove from room">×</button></div>`).join(''):'<div style="font-size:13px;color:#b7c4e5">No unassigned players.</div>';
  document.querySelectorAll('[data-pool]').forEach(b=>b.onclick=()=>assign(b.dataset.pool,+b.dataset.team));document.querySelectorAll('[data-kick]').forEach(b=>b.onclick=()=>{if(confirm('Remove this player?'))socket.emit('kick',{id:b.dataset.kick})});
  }
