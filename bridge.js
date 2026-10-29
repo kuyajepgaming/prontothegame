@@ -37,7 +37,33 @@ if(!room)return;
  document.addEventListener('keydown',unlock,{capture:true});
  window.addEventListener('message',e=>{if(e.origin===location.origin&&e.data?.type==='pronto-unlock-buzzer')unlock()});
 })();
+// Synchronize the actual player scoreboard text after every game render.
+const baseTeamLabels=['Team Pronto','Team Pilates'];
+let syncedTeamLabels=baseTeamLabels.slice();
+let paintingTeamLabels=false;
+function paintPlayerTeamNames(names){
+ if(!Array.isArray(names)||names.length<2)return;
+ const next=names.slice(0,2).map((v,i)=>String(v||baseTeamLabels[i]).trim());
+ syncedTeamLabels=next;
+ if(paintingTeamLabels)return;
+ paintingTeamLabels=true;
+ try{
+  const skip='SCRIPT,STYLE,TEXTAREA,INPUT,OPTION';
+  const walker=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);
+  const nodes=[];let node;
+  while((node=walker.nextNode())){
+   const el=node.parentElement;if(!el||el.closest('#liveTeamManagement')||skip.includes(el.tagName))continue;
+   const value=node.textContent.trim();
+   const index=baseTeamLabels.findIndex((name,i)=>value===name||value===next[i]||value===el.dataset.prontoPreviousTeamName);
+   if(index>=0&&value!==next[index])nodes.push([node,next[index]]);
+  }
+  nodes.forEach(([node,value])=>{node.parentElement.dataset.prontoPreviousTeamName=node.textContent.trim();node.textContent=value});
+ }finally{paintingTeamLabels=false}
+}
+
 const socket=io({reconnection:true});let lobby=[];
+if(!isHost){const observer=new MutationObserver(()=>{if(!paintingTeamLabels)paintPlayerTeamNames(syncedTeamLabels)});observer.observe(document.body,{childList:true,subtree:true,characterData:true});}
+
 const playerKey='pronto-room-'+room, registeredPlayerId=!isHost?localStorage.getItem(playerKey):null;
 const personalPlayer=!isHost&&!!registeredPlayerId;
 const section=document.createElement('section');section.id='onlineLobby';
@@ -119,7 +145,7 @@ if(isHost){
 }else{
  // The online player display is output-only even if opened on another computer.
  const switchBtn=document.getElementById('switchViewBtn');if(switchBtn)switchBtn.style.display='none';
- socket.on('gameSync',d=>{receiveSync(d);const names=d?.state?.teamNames;if(Array.isArray(names)&&names.length>=2){
+ socket.on('gameSync',d=>{receiveSync(d);const names=d?.state?.teamNames;paintPlayerTeamNames(names);if(Array.isArray(names)&&names.length>=2){
    const aliases=['Team Pronto','Team Pilates'];
    document.querySelectorAll('button,.team-name,.team-header,[id*=teamName],[id*=teamLabel]').forEach(el=>{
     if(el.children.length)return;
@@ -221,6 +247,6 @@ dock.style.clear='both';
 
 socket.on('buzzerState',b=>{soundOnNewBuzz(b);updateBuzzer(b)});
 socket.on('connect',()=>socket.emit('enter',{room,host:token,view:isHost?'host':personalPlayer?'participant':'display',playerId:personalPlayer?registeredPlayerId:undefined},res=>{
- if(res.error){alert(res.error);return}if(personalPlayer&&!res.playerId){location.replace('/join/'+room);return}if(res.buzzer){soundOnNewBuzz(res.buzzer);updateBuzzer(res.buzzer);if(personalPlayer)window.applyPersonalBuzzer(res.buzzer)}if(!isHost&&res.snapshot)receiveSync(res.snapshot);if(isHost)broadcast();
+ if(res.error){alert(res.error);return}if(personalPlayer&&!res.playerId){location.replace('/join/'+room);return}if(res.buzzer){soundOnNewBuzz(res.buzzer);updateBuzzer(res.buzzer);if(personalPlayer)window.applyPersonalBuzzer(res.buzzer)}if(!isHost&&res.snapshot){receiveSync(res.snapshot);paintPlayerTeamNames(res.snapshot?.state?.teamNames)}if(isHost)broadcast();
 }));
 })();
