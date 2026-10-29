@@ -275,7 +275,7 @@ if(isHost){
   return null;
  }
  function manualButtons(){
-  return [...document.querySelectorAll('button')].filter(b=>/^\\s*\\+\\s*Points to\\b/i.test(b.textContent||''));
+  return [...document.querySelectorAll('button')].filter(b=>/^\s*\+\s*Points to\b/i.test(b.textContent||''));
  }
  document.addEventListener('click',event=>{
   const button=event.target.closest?.('button');
@@ -290,7 +290,7 @@ if(isHost){
   }
   const card=button.closest('.ph-card')||button.closest('.sidebar')||document;
   const inputs=[...card.querySelectorAll('input')].filter(el=>el.type==='number'||el.type==='text'||el.type==='');
-  const input=inputs.find(el=>/^\\d+(?:\\.\\d+)?$/.test(el.value.trim()));
+  const input=inputs.find(el=>/^\d+(?:\.\d+)?$/.test(el.value.trim()));
   const amount=Number(input?.value);
   if(!Number.isFinite(amount)||amount<=0){alert('Enter a positive number of points first.');event.preventDefault();event.stopImmediatePropagation();return}
   // Cancel a stale legacy handler and apply a single authoritative update.
