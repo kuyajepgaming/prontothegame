@@ -3,7 +3,13 @@ if(!new URLSearchParams(location.search).has('host'))return;
 function init(){
  if(document.getElementById('ph-dashboard'))return;
  const sidebar=document.querySelector('.sidebar');if(!sidebar)return;
- const wanted=['LIVE ONLINE LOBBY','OPENING SCREEN & QUESTION VISIBILITY','QUESTION PICKER','HOST • REVEAL AN ANSWER','MANUAL SCORE EDITOR','MANUAL SCORING','ROUND TIMER','CUSTOMIZE GAME','TEAMS & PLAYERS','SAVE & SHARING','LIVE PLAYER BUZZERS'];
+ // Remove the retired Manual Score Editor, without affecting Manual Scoring.
+ const oldEditorHeading=[...sidebar.querySelectorAll('h1,h2,h3,h4,h5')].find(el=>el.textContent.trim().toUpperCase()==='MANUAL SCORE EDITOR');
+ if(oldEditorHeading){
+  const section=oldEditorHeading.closest('section,.panel,.card,.control-section')||oldEditorHeading.parentElement;
+  if(section&&section!==sidebar)section.remove();
+ }
+ const wanted=['LIVE ONLINE LOBBY','OPENING SCREEN & QUESTION VISIBILITY','QUESTION PICKER','HOST • REVEAL AN ANSWER','MANUAL SCORING','ROUND TIMER','CUSTOMIZE GAME','TEAMS & PLAYERS','SAVE & SHARING','LIVE PLAYER BUZZERS'];
  const n=s=>(s||'').replace(/\s+/g,' ').trim().toUpperCase();
  const label=el=>{if(!el||el.nodeType!==1)return null;const h=el.matches('h1,h2,h3,h4,h5,legend')?el:el.firstElementChild?.matches('h1,h2,h3,h4,h5,legend')?el.firstElementChild:null;return h?wanted.find(x=>n(h.textContent).startsWith(x)):null};
  const style=document.createElement('style');
