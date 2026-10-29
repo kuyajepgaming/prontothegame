@@ -1,5 +1,5 @@
 (function(){
-const params=new URLSearchParams(location.search),room=params.get('room'),token=params.get('host'),isHost=!!token;
+const params=new URLSearchParams(location.search),room=params.get('room'),token=params.get('host'),isHost=!!token&&params.get('view')!=='player';
 if(!room)return;
 
 // Remove background music entirely, including the old player toolbar and embedded media.
