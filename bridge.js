@@ -73,7 +73,21 @@ function paintPlayerTeamNames(names){
  }finally{paintingTeamLabels=false}
 }
 const socket=io({reconnection:true});let lobby=[];
-{const observer=new MutationObserver(()=>{if(!paintingTeamLabels)paintPlayerTeamNames(isHost&&Array.isArray(state?.teamNames)?state.teamNames:syncedTeamLabels)});observer.observe(document.body,{childList:true,subtree:true,characterData:true});}
+// Coalesce rapid game updates instead of walking the whole DOM on every mutation.
+{
+ let scheduled=false,lastRun=0;
+ const observer=new MutationObserver(mutations=>{
+  if(paintingTeamLabels||scheduled)return;
+  if(!mutations.some(m=>m.type==='childList'||(m.type==='characterData'&&/Team (Pronto|Pilates|A|B)/.test(m.target.textContent||''))))return;
+  scheduled=true;
+  const delay=Math.max(120,350-(Date.now()-lastRun));
+  setTimeout(()=>{
+   scheduled=false;lastRun=Date.now();
+   paintPlayerTeamNames(isHost&&Array.isArray(state?.teamNames)?state.teamNames:syncedTeamLabels);
+  },delay);
+ });
+ observer.observe(document.body,{childList:true,subtree:true,characterData:true});
+}
 
 const playerKey='pronto-room-'+room, registeredPlayerId=!isHost?localStorage.getItem(playerKey):null;
 const personalPlayer=!isHost&&!!registeredPlayerId;
