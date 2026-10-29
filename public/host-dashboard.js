@@ -79,6 +79,14 @@ function init(){
  for(const el of [...root.querySelectorAll('button')]){
   if(/team creator|open team creator/i.test(el.textContent||''))el.remove();
  }
+ // Remove the obsolete legacy Host Controls card containing Team Creator and
+ // Export/Import Save. Live Online Lobby is the active multiplayer roster.
+ for(const card of allCards()){
+  const title=norm(card.querySelector('.ph-title')?.textContent);
+  if(title!=='HOST CONTROLS')continue;
+  const t=norm(card.textContent);
+  if(t.includes('TEAMS & PLAYERS')||t.includes('SAVE & SHARING')||t.includes('EXPORT SAVE')||t.includes('IMPORT SAVE'))card.remove();
+ }
  // Remove empty wrappers left behind by moved controls.
  if(visibilityCard){
   for(const el of [...visibilityCard.querySelectorAll('div')]){
