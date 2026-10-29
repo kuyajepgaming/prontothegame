@@ -255,38 +255,50 @@ dock.style.clear='both';
 
 // Host dashboard is now loaded independently by server.js, after the game DOM.
 
-// Keep legacy Manual Scoring working after its controls are moved into host cards.
-// The game handler gets first chance to score; fallback only applies if it did nothing.
+// Explicit manual scoring: keep score updates in the original game state.
 if(isHost){
- function scoreArray(){
-  if(Array.isArray(state.scores)&&state.scores.length>=2)return state.scores;
-  if(Array.isArray(state.teamScores)&&state.teamScores.length>=2)return state.teamScores;
+ function scoreAccessor(){
+  const candidates=['scores','teamScores','totals','teamTotals','score','points'];
+  for(const key of candidates){
+   const v=state?.[key];
+   if(Array.isArray(v)&&v.length>=2&&v.slice(0,2).every(x=>Number.isFinite(Number(x)))){
+    return {read:i=>Number(v[i]),write:(i,n)=>{v[i]=n},key};
+   }
+  }
+  const pairs=[['scoreA','scoreB'],['team1Score','team2Score'],['teamAScore','teamBScore'],['score1','score2'],['pointsA','pointsB']];
+  for(const [a,b] of pairs){
+   if(Number.isFinite(Number(state?.[a]))&&Number.isFinite(Number(state?.[b])))
+    return {read:i=>Number(state[i?a:b]),write:(i,n)=>{state[i?a:b]=n},key:a+'/'+b};
+  }
+  if(Array.isArray(state?.teams)&&state.teams.length>=2&&state.teams.every(t=>t&&typeof t==='object'&&Number.isFinite(Number(t.score))))
+   return {read:i=>Number(state.teams[i].score),write:(i,n)=>{state.teams[i].score=n},key:'teams[].score'};
   return null;
  }
+ function manualButtons(){
+  return [...document.querySelectorAll('button')].filter(b=>/^\\s*\\+\\s*Points to\\b/i.test(b.textContent||''));
+ }
  document.addEventListener('click',event=>{
-  const btn=event.target.closest?.('button');
-  if(!btn||!/^\\s*\\+?\\s*Points to\\s+/i.test(btn.textContent||''))return;
-  const all=[...document.querySelectorAll('button')].filter(b=>/^\\s*\\+?\\s*Points to\\s+/i.test(b.textContent||''));
-  const index=all.indexOf(btn);
-  if(index!==0&&index!==1)return;
-  const before=scoreArray()?.map(Number);
-  if(!before)return;
-  const panel=btn.closest('.ph-card')||btn.closest('section')||btn.parentElement?.parentElement;
-  const fields=[...(panel?.querySelectorAll('input[type=number],input:not([type]),input[type=text]')||[])];
-  const input=fields.find(el=>el.offsetParent!==null&&/^[-+]?\\d+(?:\\.\\d+)?$/.test(el.value.trim()));
-  const points=input?Number(input.value):NaN;
-  if(!Number.isFinite(points)||points<=0)return;
-  setTimeout(()=>{
-   const scores=scoreArray();
-   if(!scores||Number(scores[index])!==before[index])return;
-   const next=Math.max(0,Math.round(Number(scores[index]||0)+points));
-   scores[index]=next;
-   render();
-   broadcast();
-  },0);
+  const button=event.target.closest?.('button');
+  if(!button)return;
+  const options=manualButtons(),team=options.indexOf(button);
+  if(team<0||team>1)return;
+  const accessor=scoreAccessor();
+  if(!accessor){
+   console.error('Pronto scoring state keys',Object.keys(state||{}));
+   alert('Manual scoring is unavailable: unable to find the current team totals. Please report this error.');
+   event.preventDefault();event.stopImmediatePropagation();return;
+  }
+  const card=button.closest('.ph-card')||button.closest('.sidebar')||document;
+  const inputs=[...card.querySelectorAll('input')].filter(el=>el.type==='number'||el.type==='text'||el.type==='');
+  const input=inputs.find(el=>/^\\d+(?:\\.\\d+)?$/.test(el.value.trim()));
+  const amount=Number(input?.value);
+  if(!Number.isFinite(amount)||amount<=0){alert('Enter a positive number of points first.');event.preventDefault();event.stopImmediatePropagation();return}
+  // Cancel a stale legacy handler and apply a single authoritative update.
+  event.preventDefault();event.stopImmediatePropagation();
+  accessor.write(team,Math.round((accessor.read(team)+amount)*100)/100);
+  try{render();broadcast()}catch(error){console.error('Manual scoring render failed',error);alert('Score updated, but display synchronization failed.')}
  },true);
 }
-
 socket.on('buzzerState',b=>{soundOnNewBuzz(b);updateBuzzer(b)});
 socket.on('connect',()=>socket.emit('enter',{room,host:token,view:isHost?'host':personalPlayer?'participant':'display',playerId:personalPlayer?registeredPlayerId:undefined},res=>{
  if(res.error){alert(res.error);return}if(personalPlayer&&!res.playerId){location.replace('/join/'+room);return}if(res.buzzer){soundOnNewBuzz(res.buzzer);updateBuzzer(res.buzzer);if(personalPlayer)window.applyPersonalBuzzer(res.buzzer)}if(!isHost&&res.snapshot){receiveSync(res.snapshot);paintPlayerTeamNames(res.snapshot?.state?.teamNames)}if(isHost)broadcast();
