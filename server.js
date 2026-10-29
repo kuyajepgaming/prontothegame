@@ -17,21 +17,28 @@ app.post('/api/rooms',(req,res)=>{let c=code();while(rooms.has(c))c=code();const
 app.get('/api/rooms/:code',(req,res)=>{const r=rooms.get(req.params.code.toUpperCase());if(!r)return res.status(404).json({error:'Room not found'});res.json({code:r.code,open:true,hostOnline:!!r.hostSocket});});
 app.get('/bridge.js',(req,res)=>res.type('application/javascript').sendFile(path.join(__dirname,'bridge.js')));
 app.get('/join/:code',(req,res)=>res.sendFile(path.join(__dirname,'public','join.html')));
+// Prepare cached compressed copies once; do not read and manipulate 6 MB on each request.
+const fs=require('fs'),zlib=require('zlib');
+const gameSource=fs.readFileSync(path.join(__dirname,'public','game.html'),'utf8');
+const dashboardTag='<script defer src="/host-dashboard.js?v=6"></script>';
+const closing=gameSource.toLowerCase().lastIndexOf('</body>');
+const hostSource=closing>=0?gameSource.slice(0,closing)+dashboardTag+gameSource.slice(closing):gameSource+dashboardTag;
+function compressed(source){
+ const plain=Buffer.from(source,'utf8');
+ return {plain,gzip:zlib.gzipSync(plain,{level:6}),br:zlib.brotliCompressSync(plain,{params:{[zlib.constants.BROTLI_PARAM_QUALITY]:5}})};
+}
+const gameCache={host:compressed(hostSource),player:compressed(gameSource)};
 app.get('/game',(req,res)=>{
- // Load the independently maintained host dashboard after the game document.
- // Avoid editing the multi-megabyte game.html with embedded artwork/audio.
- res.type('html');
- const source=path.join(__dirname,'public','game.html');
- const fs=require('fs');
- fs.readFile(source,'utf8',(err,html)=>{
-  if(err)return res.status(500).send('Game not available');
-  if(req.query.host&&req.query.view!=='player'){
-   const script='<script defer src="/host-dashboard.js?v=5"></script>';
-   html=/<\/body>/i.test(html)?html.replace(/<\/body>/i,script+'</body>'):html+script;
-   res.set('Cache-Control','no-store');
-  }
-  res.send(html);
- });
+ const variant=gameCache[req.query.host&&req.query.view!=='player'?'host':'player'];
+ const accepts=String(req.headers['accept-encoding']||'');
+ let data=variant.plain,encoding='';
+ if(accepts.includes('br')){data=variant.br;encoding='br'}
+ else if(accepts.includes('gzip')){data=variant.gzip;encoding='gzip'}
+ res.set('Content-Type','text/html; charset=utf-8');
+ res.set('Vary','Accept-Encoding');
+ res.set('Cache-Control','private, no-cache');
+ if(encoding)res.set('Content-Encoding',encoding);
+ res.send(data);
 });
 app.use(express.static(path.join(__dirname,'public')));
 io.on('connection',socket=>{
