@@ -18,7 +18,7 @@ function init(){
  const back=document.createElement('button');back.className='ph-return';back.hidden=true;back.textContent='☷ Edit Layout';document.body.appendChild(back);
  const panels=new Map();
  function add(title,els){
-  if(!els.length)return;const id='panel-'+panels.size,wrap=document.createElement('section');const parent=els[0].parentNode;parent.insertBefore(wrap,els[0]);els.forEach(el=>wrap.appendChild(el));panels.set(id,{title,wrap});
+  if(!els.length)return;const id='panel-'+panels.size,wrap=document.createElement('section');const parent=els[0].parentNode;const marker=document.createComment('host-panel-'+id);parent.insertBefore(marker,els[0]);parent.insertBefore(wrap,els[0]);els.forEach(el=>wrap.appendChild(el));panels.set(id,{title,wrap,marker});
  }
  function group(parent,depth){
   if(depth>6)return;
@@ -73,16 +73,16 @@ function init(){
  }
  function enterEdit(){
   collect();if(!all.length)load();
-  editing=true;root.hidden=false;launcher.hidden=true;back.hidden=true;draw();
+  editing=true;root.querySelector('#ph-save').textContent='Save Layout';root.hidden=false;launcher.hidden=true;back.hidden=true;draw();
  }
  function finishEdit(){
   editing=false;save();draw();root.querySelector('#ph-save').textContent='Edit Layout';
  }
  function restore(){
   for(const item of panels.values()) {
-   // Restore controls into their original sidebar area when leaving the layout dashboard.
-   const children=[...item.wrap.children];
-   item.wrap.replaceWith(...children);
+   // Move controls back to the original sidebar locations, preserving live listeners.
+   item.marker.replaceWith(...item.wrap.children);
+   item.wrap.remove();
   }
   panels.clear();collected=false;all.length=0;
   root.hidden=true;launcher.hidden=false;back.hidden=true;
