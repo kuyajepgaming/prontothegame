@@ -25,7 +25,7 @@ app.get('/game',(req,res)=>{
  const fs=require('fs');
  fs.readFile(source,'utf8',(err,html)=>{
   if(err)return res.status(500).send('Game not available');
-  if(req.query.host){
+  if(req.query.host&&req.query.view!=='player'){
    const script='<script defer src="/host-dashboard.js?v=5"></script>';
    html=/<\/body>/i.test(html)?html.replace(/<\/body>/i,script+'</body>'):html+script;
    res.set('Cache-Control','no-store');
