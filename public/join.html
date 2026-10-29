@@ -57,14 +57,9 @@ byId('join').onclick=join;
 byId('name').onkeydown=e=>{if(e.key==='Enter')join()};
 byId('enterGame').onclick=()=>{
  if(!frameReady)return;
- const frame=byId('gameFrame'),win=frame.contentWindow;
- // Invoked directly from a user's click, rather than an autoplay attempt.
- try{
-  const doc=win.document;
-  const play=doc.getElementById('musicPlay');
-  if(play)play.click();
-  else doc.getElementById('backgroundMusic')?.play().catch(()=>{});
- }catch(e){console.warn('Music initialization:',e)}
+ // Player joins the game without starting background music.
+ const frame=byId('gameFrame');
+ try{frame.contentWindow?.postMessage({type:'pronto-unlock-buzzer'},location.origin)}catch(e){}
  frame.style.display='block';
  byId('gate').style.display='none';
 };
