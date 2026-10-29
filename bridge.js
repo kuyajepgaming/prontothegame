@@ -2,44 +2,17 @@
 const params=new URLSearchParams(location.search),room=params.get('room'),token=params.get('host'),isHost=!!token;
 if(!room)return;
 
-// Try playing the title music as soon as the remote player display loads.
-// Browsers may reject audible autoplay until the visitor interacts with this page.
-if(!isHost && params.get('view')==='player'){
- const music=document.getElementById('backgroundMusic');
- const playButton=document.getElementById('musicPlay');
- const stopButton=document.getElementById('musicStop');
- const status=document.getElementById('musicStatus');
- if(music){
-  music.loop=true;
-  let intentionallyStopped=false,starting=false,started=false;
-  const enable=document.createElement('button');
-  enable.type='button';enable.textContent='▶ Enable Music';
-  enable.setAttribute('aria-label','Enable background music');
-  enable.style.cssText='position:fixed;right:16px;bottom:82px;z-index:1001;padding:10px 14px;border-radius:9px;background:#ffca54;color:#061736;border:0;font-weight:800;cursor:pointer;box-shadow:0 4px 20px #0009;display:none';
-  document.body.appendChild(enable);
-  async function tryStart(){
-   if(window.prontoHostMusicStopped||intentionallyStopped||started||starting||!music.paused)return;
-   starting=true;
-   try{
-    const value=window.prontoHostMusicVolume ?? Number(document.getElementById('playerVolume')?.value||45);
-    music.volume=Math.max(0,Math.min(1,value/100));
-    await music.play();started=true;enable.style.display='none';
-    if(typeof updateMusicStatus==='function'){musicPlaying=true;updateMusicStatus()}
-   }catch(e){
-    if(!intentionallyStopped&&!window.prontoHostMusicStopped){enable.style.display='block';if(status)status.textContent='Tap Enable Music'}
-   }finally{starting=false}
-  }
-  enable.addEventListener('click',()=>{intentionallyStopped=false;started=false;tryStart()});
-  stopButton?.addEventListener('click',()=>{intentionallyStopped=true;started=false;enable.style.display='none'});
-  playButton?.addEventListener('click',()=>{if(window.prontoHostMusicStopped)return;intentionallyStopped=false;started=true;enable.style.display='none'});
-  // Browsers allow sound after an explicit click/touch/keyboard gesture.
-  const unlock=()=>{if(!window.prontoHostMusicStopped&&!intentionallyStopped&&!started)tryStart()};
-  document.addEventListener('pointerdown',unlock,{capture:true});
-  document.addEventListener('keydown',unlock,{capture:true});
-  window.addEventListener('pageshow',tryStart);
-  tryStart();
- }
-}
+// Remove background music entirely, including the old player toolbar and embedded media.
+(function removeBackgroundMusic(){
+ const audio=document.getElementById('backgroundMusic');
+ if(audio){audio.pause();audio.removeAttribute('autoplay');audio.removeAttribute('src');audio.querySelectorAll('source').forEach(s=>s.remove());audio.load();audio.remove();}
+ const controls=['musicPlay','musicStop','playerVolume','musicStatus'];
+ controls.forEach(id=>{const el=document.getElementById(id);if(el)el.style.display='none'});
+ // Hide the compact music controls as a whole, without disturbing the game or timer.
+ const play=document.getElementById('musicPlay');
+ if(play){const parent=play.parentElement;if(parent&&parent.id!=='body')parent.style.display='none';}
+ [...document.querySelectorAll('button')].filter(b=>/enable music/i.test(b.textContent||'')).forEach(b=>b.remove());
+})();
 
 /* Enable buzzer audio silently on normal user interaction; no separate button. */
 (function setupBuzzerAudio(){
@@ -98,61 +71,32 @@ if(isHost){
  socket.on('gameSync',d=>receiveSync(d));socket.on('gameStrike',d=>showStrike(d.count));
 }
 
-// Host-authoritative room music controls; only background music is affected, not buzzers or strikes.
-const roomMusic=document.getElementById('backgroundMusic');
-function applyRoomMusic(m){
- if(!m)return;
- const level=Math.max(0,Math.min(100,Number(m.volume) || 0));
- window.prontoHostMusicVolume=level;
- window.prontoHostMusicStopped=!m.playing;
- if(roomMusic)roomMusic.volume=level/100;
- if(!isHost){
-  const playerSlider=document.getElementById('playerVolume');
-  if(playerSlider){playerSlider.value=String(level);playerSlider.disabled=true;playerSlider.title='Volume controlled by host';}
-  const playerPlay=document.getElementById('musicPlay');
-  if(playerPlay){playerPlay.disabled=!m.playing;playerPlay.title=m.playing?'':'Music stopped by host';}
-  if(!m.playing){
-   roomMusic?.pause();
-   const enable=[...document.querySelectorAll('button')].find(b=>b.textContent==='▶ Enable Music');
-   if(enable)enable.style.display='none';
-  }else if(roomMusic?.paused){
-   // Autoplay may be blocked until the player interacts with their browser.
-   roomMusic.play().catch(()=>{});
-  }
- }
- if(isHost){
-  const v=document.getElementById('hostMusicVolume'),n=document.getElementById('hostMusicPercent'),s=document.getElementById('hostMusicStatus');
-  if(v)v.value=String(level);
-  if(n)n.textContent=level+'%';
-  if(s)s.textContent=m.playing?'Playing for players':'Stopped for everyone';
- }
+// Distinct, short game-show buzzer. Sounds only for accepted server buzzes.
+let buzzAudioContext=null;
+function unlockBuzzAudio(){
+ try{buzzAudioContext??=new (window.AudioContext||window.webkitAudioContext)();if(buzzAudioContext.state==='suspended')buzzAudioContext.resume().catch(()=>{});}catch(e){}
 }
-if(!isHost){
- // Even local player controls cannot restart music while the host has stopped it.
- document.getElementById('musicPlay')?.addEventListener('click',e=>{
-  if(window.prontoHostMusicStopped){e.preventDefault();e.stopImmediatePropagation();roomMusic?.pause();}
- },true);
- roomMusic?.addEventListener('play',()=>{if(window.prontoHostMusicStopped)roomMusic.pause()});
+document.addEventListener('pointerdown',unlockBuzzAudio,{capture:true,once:true});
+document.addEventListener('keydown',unlockBuzzAudio,{capture:true,once:true});
+function playPlayerBuzzerSound(){
+ try{
+  unlockBuzzAudio();
+  if(!buzzAudioContext||buzzAudioContext.state!=='running')return;
+  const now=buzzAudioContext.currentTime;
+  const osc=buzzAudioContext.createOscillator(),amp=buzzAudioContext.createGain();
+  osc.type='square';osc.frequency.setValueAtTime(520,now);osc.frequency.exponentialRampToValueAtTime(310,now+0.22);
+  amp.gain.setValueAtTime(0.0001,now);amp.gain.exponentialRampToValueAtTime(0.16,now+0.012);
+  amp.gain.exponentialRampToValueAtTime(0.0001,now+0.26);
+  osc.connect(amp);amp.connect(buzzAudioContext.destination);osc.start(now);osc.stop(now+0.27);
+ }catch(e){}
 }
-if(isHost){
- const panel=document.createElement('section');
- panel.id='hostMusicPanel';
- panel.style.cssText='background:#101f40;border:1px solid #4866a1;border-radius:14px;padding:15px;margin:12px 0;color:white';
- panel.innerHTML='<h3 style="margin:0 0 10px;color:#ffcf58">PLAYER BACKGROUND MUSIC</h3><label for="hostMusicVolume" style="display:flex;justify-content:space-between;gap:12px;font-weight:700">All-player volume <span id="hostMusicPercent">45%</span></label><input type="range" id="hostMusicVolume" min="0" max="100" value="45" style="width:100%;margin:12px 0;accent-color:#ffce58"><div style="display:flex;flex-wrap:wrap;gap:8px"><button class="btn primary" id="hostMusicPlay">▶ Play / Resume All</button><button class="btn" id="hostMusicStop">■ Stop All</button></div><p id="hostMusicStatus" style="font-size:12px;color:#c6d9f6;margin:10px 0 0">Connecting…</p>';
- section.appendChild(panel);
- let volumeTimer=null;
- const submitVolume=()=>{
-  socket.emit('musicControl',{action:'volume',volume:Number(document.getElementById('hostMusicVolume').value)},r=>{if(r?.error)alert(r.error)});
- };
- document.getElementById('hostMusicVolume').addEventListener('input',e=>{
-  document.getElementById('hostMusicPercent').textContent=e.target.value+'%';
-  clearTimeout(volumeTimer);volumeTimer=setTimeout(submitVolume,100);
- });
- document.getElementById('hostMusicVolume').addEventListener('change',()=>{clearTimeout(volumeTimer);submitVolume()});
- document.getElementById('hostMusicPlay').onclick=()=>socket.emit('musicControl',{action:'play'},r=>{if(r?.error)alert(r.error)});
- document.getElementById('hostMusicStop').onclick=()=>socket.emit('musicControl',{action:'stop'},r=>{if(r?.error)alert(r.error)});
+let knownBuzzIds=new Set(),buzzerInitialized=false;
+function soundOnNewBuzz(b){
+ const entries=Array.isArray(b?.entries)?b.entries:[];
+ const currentIds=new Set(entries.map(e=>e.id));
+ if(buzzerInitialized&&entries.some(e=>!knownBuzzIds.has(e.id)))playPlayerBuzzerSound();
+ knownBuzzIds=currentIds;buzzerInitialized=true;
 }
-socket.on('musicState',applyRoomMusic);
 
 const buzzerPanel=document.createElement('section');
 buzzerPanel.style.cssText='background:#101f40;border:1px solid #4866a1;border-radius:14px;padding:15px;margin:12px 0;color:white';
@@ -197,7 +141,7 @@ if(timerLabel){
 }else{
  document.body.appendChild(dock);
 }
-// Keep space beneath the control for the bottom-right music controls.
+// Space below the inline buzzer keeps it clear of other game elements.
 dock.style.clear='both';
  let personalBuzzer={open:false,entries:[]},pending=false;
  function renderPersonalBuzz(){
@@ -212,8 +156,8 @@ dock.style.clear='both';
  socket.on('connect',()=>{pending=false;renderPersonalBuzz()});
  window.applyPersonalBuzzer=b=>{personalBuzzer=b;renderPersonalBuzz()};
 }
-socket.on('buzzerState',updateBuzzer);
+socket.on('buzzerState',b=>{soundOnNewBuzz(b);updateBuzzer(b)});
 socket.on('connect',()=>socket.emit('enter',{room,host:token,view:isHost?'host':personalPlayer?'participant':'display',playerId:personalPlayer?registeredPlayerId:undefined},res=>{
- if(res.error){alert(res.error);return}if(personalPlayer&&!res.playerId){location.replace('/join/'+room);return}if(res.music)applyRoomMusic(res.music);if(res.buzzer){updateBuzzer(res.buzzer);if(personalPlayer)window.applyPersonalBuzzer(res.buzzer)}if(!isHost&&res.snapshot)receiveSync(res.snapshot);if(isHost)broadcast();
+ if(res.error){alert(res.error);return}if(personalPlayer&&!res.playerId){location.replace('/join/'+room);return}if(res.buzzer){soundOnNewBuzz(res.buzzer);updateBuzzer(res.buzzer);if(personalPlayer)window.applyPersonalBuzzer(res.buzzer)}if(!isHost&&res.snapshot)receiveSync(res.snapshot);if(isHost)broadcast();
 }));
 })();
