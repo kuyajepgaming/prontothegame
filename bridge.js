@@ -157,136 +157,123 @@ dock.style.clear='both';
  window.applyPersonalBuzzer=b=>{personalBuzzer=b;renderPersonalBuzz()};
 }
 
+
+// Live Host Dashboard: the panels ARE the host interface, not a separate layout editor.
 if(isHost){
  const sidebar=document.querySelector('.sidebar');
  if(sidebar){
   const css=document.createElement('style');
-  css.textContent='#hostLayoutOpen{position:fixed;top:12px;right:16px;z-index:1200;background:#ffce58;color:#0b1e41;border:0;border-radius:9px;padding:12px;font-weight:900;cursor:pointer}#hostLayoutWorkspace{position:fixed;inset:0;z-index:2000;background:#06142ffb;color:white;overflow:auto;padding:16px 24px 60px;font-family:system-ui,sans-serif}#hostLayoutWorkspace[hidden]{display:none}#hostLayoutTop{position:sticky;top:-16px;background:#071a38;z-index:5;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px;border-bottom:1px solid #5277a0}#hostLayoutTop button{background:#ffce58;color:#102344;border:0;border-radius:8px;padding:9px 13px;font-weight:800;cursor:pointer}#hostLayoutRows{display:flex;flex-direction:column;gap:12px;margin:16px auto;max-width:1800px}.host-layout-row{display:flex;gap:12px;min-height:130px;align-items:stretch}.host-layout-tile{position:relative;background:#0b2248;border:1px solid #426ba3;border-radius:13px;min-width:190px;min-height:130px;display:flex;flex-direction:column;overflow:hidden}.host-layout-handle{background:#173868;color:#ffce58;cursor:grab;padding:10px 12px;font-weight:900;display:flex;gap:8px;align-items:center;user-select:none}.host-layout-handle span{flex:1}.host-layout-content{padding:10px;overflow:auto;flex:1;min-height:50px}.host-layout-content>*{max-width:100%!important;box-sizing:border-box}.host-layout-grip{position:absolute;right:0;bottom:0;width:22px;height:22px;z-index:3;cursor:nwse-resize;background:linear-gradient(135deg,transparent 45%,#ffce58 48%,#ffce58 60%,transparent 62%)}.host-layout-tile[data-drop]{outline:3px solid #ffce58;outline-offset:-3px}@media(max-width:650px){#hostLayoutWorkspace{padding:8px}.host-layout-row{flex-direction:column}.host-layout-tile{width:100%!important;flex:auto!important;min-width:0}#hostLayoutTop{top:-8px}}';
+  css.textContent='#prontoHostDashboard{position:fixed;inset:0;z-index:1800;background:#07152f;color:white;overflow:auto;padding:16px 20px 55px;font:14px system-ui,sans-serif}#prontoHostDashboard[hidden]{display:none!important}#prontoHostHeader{position:sticky;top:-16px;z-index:10;background:#091b3c;border-bottom:1px solid #45618b;padding:12px 4px;display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap}#prontoHostHeader strong{color:#ffcf58;font-size:20px}#prontoHostHeader button{cursor:pointer;padding:10px 13px;background:#214572;color:white;border:1px solid #59769e;border-radius:8px;font-weight:800}#prontoHostGrid{display:flex;flex-direction:column;gap:12px;max-width:1900px;margin:15px auto}.pronto-host-row{display:flex;gap:12px;width:100%;align-items:stretch}.pronto-host-panel{position:relative;background:#102348;border:1px solid #4b6797;border-radius:13px;min-width:0;min-height:140px;display:flex;flex-direction:column;overflow:hidden}.pronto-host-title{display:flex;gap:8px;align-items:center;padding:11px 14px;background:#203b68;color:#ffcf58;font-weight:850;cursor:grab;user-select:none;touch-action:none}.pronto-host-title span{flex:1}.pronto-host-body{overflow:auto;min-height:70px;flex:1;padding:12px}.pronto-host-body>*{max-width:100%!important;box-sizing:border-box}.pronto-host-body input,.pronto-host-body select,.pronto-host-body textarea{max-width:100%!important}.pronto-host-panel[data-over]{outline:3px solid #ffcf58;outline-offset:-3px}.pronto-host-resize{position:absolute;bottom:0;right:0;z-index:4;width:22px;height:22px;cursor:nwse-resize;background:linear-gradient(135deg,transparent 46%,#ffcf58 47%,#ffcf58 65%,transparent 66%)}@media(max-width:700px){#prontoHostDashboard{padding:8px}.pronto-host-row{flex-wrap:wrap}.pronto-host-panel{flex-basis:100%!important}#prontoHostHeader{top:-8px}}';
   document.head.appendChild(css);
-  const workspace=document.createElement('div');workspace.id='hostLayoutWorkspace';workspace.hidden=true;
-  workspace.innerHTML='<div id="hostLayoutTop"><strong style="font-size:20px;color:#ffce58">☷ Customize Host Panels</strong><div><button id="hostLayoutReset">Reset Layout</button> <button id="hostLayoutClose">Back to Game ✕</button></div></div><p style="color:#bbcfed">Drag a panel header to an edge of another panel: left/right shares a row, top/bottom creates a row. Drag the gold bottom-right corner to resize the panel. Layout is saved automatically.</p><div id="hostLayoutRows"></div>';
-  document.body.appendChild(workspace);
-  const open=document.createElement('button');open.id='hostLayoutOpen';open.textContent='☷ Customize Host Panels';document.body.appendChild(open);
-  const root=workspace.querySelector('#hostLayoutRows'),originals=new Map(),storageKey='pronto-host-layout-v1';
-  let rows=[],sizes={},dragged=null,initialized=false;
-  function save(){try{localStorage.setItem(storageKey,JSON.stringify({rows,sizes}))}catch(e){}}
-  function setup(){
-   if(initialized)return;initialized=true;
-   // Split the existing sidebar at its section headings, keeping each control's
-   // original DOM node and attached event handlers. The lobby is its own panel.
-   const getHeading=el=>{
-    if(el.matches?.('h1,h2,h3,h4,legend,.panel-title,.section-title'))return el;
-    const first=el.querySelector?.('h2,h3,h4,legend,.panel-title,.section-title');
-    return first&&first.parentElement===el?first:null;
-   };
-   const titleFor=(el)=>getHeading(el)?.textContent?.trim()||'';
-   const normalize=s=>s.replace(/\s+/g,' ').trim();
-   let items=[...sidebar.children].filter(el=>el.nodeType===1);
-   // Some host versions wrap all controls in a single vertical container.
-   if(items.length===1 && items[0].children.length>2 &&
-      getComputedStyle(items[0]).display!=='grid'){
-    const wrapper=items[0];
-    if([...wrapper.children].some(ch=>getHeading(ch)))items=[...wrapper.children];
-   }
-   const groups=[];let active=null;
-   const newGroup=(title)=>{active={title:normalize(title),nodes:[]};groups.push(active)};
-   for(const el of items){
-    const heading=titleFor(el);
-    const isSection=/^LIVE ONLINE LOBBY$/i.test(heading) ||
-      /^(OPENING SCREEN|QUESTION VISIBILITY|QUESTION PICKER|ROUND|SCORING|TEAM|TIMER|STRIKE|BUZZER|GAME|ANSWER|SETTINGS|CONTROLS)/i.test(heading);
-    if(isSection || (heading && groups.length))newGroup(heading);
-    else if(!active)newGroup(heading||'General Host Controls');
-    active.nodes.push(el);
-   }
-   // A heading and the controls immediately after it form one draggable panel.
-   // If a section wrapper includes several heading-led sections, split its direct
-   // children rather than treating the entire wrapper as one undifferentiated panel.
-   const expanded=[];
-   for(const group of groups){
-    if(group.nodes.length!==1){expanded.push(group);continue}
-    const wrapper=group.nodes[0],children=[...wrapper.children];
-    const headings=children.map(titleFor).filter(Boolean);
-    if(headings.length<2){expanded.push(group);continue}
-    let sub=null;
-    for(const node of children){
-     const label=titleFor(node);
-     if(label){sub={title:normalize(label),nodes:[]};expanded.push(sub)}
-     else if(!sub){sub={title:group.title,nodes:[]};expanded.push(sub)}
-     sub.nodes.push(node);
+  const dashboard=document.createElement('div');dashboard.id='prontoHostDashboard';
+  dashboard.innerHTML='<div id="prontoHostHeader"><strong>☷ Pronto Host Control Panel</strong><div style="display:flex;gap:8px;flex-wrap:wrap"><button id="prontoHostBoard">Show Game Board</button><button id="prontoHostReset">Reset Panel Layout</button></div></div><p style="color:#b9c9e9;margin:10px 2px">Drag panel headers to arrange. Drop on the left/right side to share a row or on the top/bottom to create a full-width row. Resize with the gold bottom-right corner. Layout saves automatically.</p><div id="prontoHostGrid"></div>';
+  // Put the dashboard INSIDE the sidebar so existing delegated sidebar events still work.
+  sidebar.appendChild(dashboard);
+  // Fixed positioning allows full-screen layout even inside a narrow sidebar.
+  const grid=dashboard.querySelector('#prontoHostGrid'),panels=new Map(),key='pronto-host-dashboard-v3';
+  let rows=[],sizes={},moving=null;
+  function addPanel(nodes,label){
+   if(!nodes.length)return;
+   const id='section-'+panels.size;
+   const wrap=document.createElement('section');
+   nodes[0].parentNode.insertBefore(wrap,nodes[0]);
+   nodes.forEach(node=>wrap.appendChild(node));
+   panels.set(id,{wrap,title:label||'Host Controls '+(panels.size+1)});
+  }
+  // Find the actual heading boundaries. Handle both headings directly under the
+  // sidebar and one-level nested containers with multiple headings.
+  function heading(node){
+   if(!node||node.nodeType!==1)return'';
+   if(node.matches('h1,h2,h3,h4,legend'))return(node.textContent||'').trim();
+   return'';
+  }
+  function split(container){
+   const children=[...container.children].filter(n=>n!==dashboard);
+   let current=[],title='';
+   function flush(){if(current.length){addPanel(current,title);current=[];title=''}}
+   for(const node of children){
+    const h=heading(node);
+    if(h){flush();title=h;current=[node];continue}
+    const directHeaders=[...node.children].filter(ch=>!!heading(ch));
+    if(directHeaders.length>=2){
+     flush();split(node);continue;
     }
+    if(directHeaders.length===1 && children.length===1){flush();split(node);continue}
+    if(!current.length)title=node.querySelector('h2,h3,h4')?.textContent?.trim()||node.id||'Host Controls';
+    current.push(node);
    }
-   expanded.filter(g=>g.nodes.length).forEach((group,i)=>{
-    const title=group.title||'Host Controls '+(i+1);
-    const id='panel-'+i;
-    const first=group.nodes[0],marker=document.createComment(id);
-    first.parentNode.insertBefore(marker,first);
-    const container=document.createElement('section');container.className='host-control-group';
-    for(const node of group.nodes)container.appendChild(node);
-    originals.set(id,{el:container,marker,title});
-   });
-   const ids=[...originals.keys()];
-   try{
-    const saved=JSON.parse(localStorage.getItem(storageKey)||'{}'),seen=new Set();
-    rows=(Array.isArray(saved.rows)?saved.rows:[]).map(row=>Array.isArray(row)?row.filter(id=>ids.includes(id)&&!seen.has(id)&&seen.add(id)):[]).filter(row=>row.length);
-    if(saved.sizes&&typeof saved.sizes==='object')sizes=saved.sizes;
-   }catch(e){}
-   ids.filter(id=>!rows.some(row=>row.includes(id))).forEach(id=>rows.push([id]));
+   flush();
   }
-  function locate(tile,event){
-   const r=tile.getBoundingClientRect(),x=(event.clientX-r.left)/r.width,y=(event.clientY-r.top)/r.height;
-   if(y<.25)return'top';if(y>.75)return'bottom';return x<.5?'left':'right';
-  }
-  function move(source,target,edge){
+  // Use a stable top-level section for Live Lobby and Live Buzzers.
+  const fixedGroups=[...sidebar.children].filter(n=>n!==dashboard);
+  fixedGroups.forEach(node=>{
+   if(node.id==='onlineLobby'){addPanel([node],'LIVE ONLINE LOBBY')}
+   else if(node.querySelectorAll('h2,h3,h4').length>1){split(node)}
+   else if(node.classList.contains('sidebar-group')||node.classList.contains('panel')){addPanel([node],node.querySelector('h2,h3,h4')?.textContent?.trim()||'Host Controls')}
+  });
+  const remaining=[...sidebar.children].filter(node=>node!==dashboard&&!([...panels.values()].some(p=>p.wrap===node)));
+  // Existing wrappers whose children were extracted may still contain other controls.
+  remaining.forEach(node=>{
+   if(node.matches('section')&&!node.children.length)return;
+   if(node.querySelectorAll('h2,h3,h4').length>=2)split(node);
+   else if(node!==dashboard&&!node.closest('.pronto-host-body')&&node.childNodes.length)addPanel([node],heading(node)||node.querySelector('h2,h3,h4')?.textContent?.trim()||node.id||'Other Host Controls');
+  });
+  const ids=[...panels.keys()];const seen=new Set();
+  try{const saved=JSON.parse(localStorage.getItem(key)||'{}');
+   rows=(Array.isArray(saved.rows)?saved.rows:[]).map(row=>Array.isArray(row)?row.filter(id=>ids.includes(id)&&!seen.has(id)&&seen.add(id)):[]).filter(row=>row.length);
+   sizes=saved.sizes&&typeof saved.sizes==='object'?saved.sizes:{};
+  }catch(e){}
+  ids.filter(id=>!seen.has(id)).forEach(id=>rows.push([id]));
+  function save(){try{localStorage.setItem(key,JSON.stringify({rows,sizes}))}catch(e){}}
+  function edge(tile,e){const r=tile.getBoundingClientRect(),x=(e.clientX-r.left)/r.width,y=(e.clientY-r.top)/r.height;return y<.25?'top':y>.75?'bottom':x<.5?'left':'right'}
+  function move(source,target,side){
    if(source===target)return;
-   rows=rows.map(row=>row.filter(id=>id!==source)).filter(row=>row.length);
-   const ri=rows.findIndex(row=>row.includes(target));
-   if(ri<0){rows.push([source])}
-   else if(edge==='top'||edge==='bottom'){rows.splice(ri+(edge==='bottom'?1:0),0,[source])}
-   else{const pos=rows[ri].indexOf(target);rows[ri].splice(pos+(edge==='right'?1:0),0,source)}
+   rows=rows.map(r=>r.filter(id=>id!==source)).filter(r=>r.length);
+   const ri=rows.findIndex(r=>r.includes(target));if(ri<0)rows.push([source]);
+   else if(side==='top'||side==='bottom')rows.splice(ri+(side==='bottom'?1:0),0,[source]);
+   else{const i=rows[ri].indexOf(target);rows[ri].splice(i+(side==='right'?1:0),0,source)}
    save();render();
   }
   function render(){
-   root.replaceChildren();
-   rows.forEach(row=>{
-    const rowEl=document.createElement('div');rowEl.className='host-layout-row';
-    row.forEach(id=>{
-     const data=originals.get(id);if(!data)return;
-     const tile=document.createElement('article');tile.className='host-layout-tile';tile.dataset.id=id;
-     tile.style.height=Math.max(130,Number(sizes[id]?.height)||260)+'px';
-     tile.style.flex=(Math.max(15,Number(sizes[id]?.width)||50))+' 1 0%';
-     const handle=document.createElement('div');handle.className='host-layout-handle';handle.draggable=true;
-     const title=document.createElement('span');title.textContent='⠿  '+data.title;
-     handle.appendChild(title);
-     handle.addEventListener('dragstart',e=>{dragged=id;e.dataTransfer.setData('text/plain',id);e.dataTransfer.effectAllowed='move'});
-     handle.addEventListener('dragend',()=>{dragged=null;root.querySelectorAll('[data-drop]').forEach(el=>el.removeAttribute('data-drop'))});
-     tile.addEventListener('dragover',e=>{if(!dragged||dragged===id)return;e.preventDefault();tile.dataset.drop=locate(tile,e)});
-     tile.addEventListener('dragleave',e=>{if(!tile.contains(e.relatedTarget))tile.removeAttribute('data-drop')});
-     tile.addEventListener('drop',e=>{if(!dragged||dragged===id)return;e.preventDefault();move(dragged,id,locate(tile,e));dragged=null});
-     const content=document.createElement('div');content.className='host-layout-content';content.appendChild(data.el);
-     const grip=document.createElement('div');grip.className='host-layout-grip';grip.title='Resize panel width and height';
+   grid.replaceChildren();
+   for(const rowIds of rows){
+    const row=document.createElement('div');row.className='pronto-host-row';
+    for(const id of rowIds){
+     const item=panels.get(id);if(!item)continue;
+     const tile=document.createElement('section');tile.className='pronto-host-panel';tile.dataset.id=id;
+     const size=sizes[id]||{};tile.style.height=Math.max(140,Math.min(1500,Number(size.height)||280))+'px';
+     tile.style.flex=(Math.max(10,Math.min(350,Number(size.width)||100)))+' 1 0';
+     const handle=document.createElement('div');handle.className='pronto-host-title';handle.draggable=true;
+     const name=document.createElement('span');name.textContent='⠿ '+item.title;handle.appendChild(name);
+     handle.addEventListener('dragstart',e=>{moving=id;e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',id)});
+     handle.addEventListener('dragend',()=>{moving=null;grid.querySelectorAll('[data-over]').forEach(n=>n.removeAttribute('data-over'))});
+     tile.addEventListener('dragover',e=>{if(!moving||moving===id)return;e.preventDefault();tile.dataset.over=edge(tile,e)});
+     tile.addEventListener('dragleave',e=>{if(!tile.contains(e.relatedTarget))tile.removeAttribute('data-over')});
+     tile.addEventListener('drop',e=>{if(!moving||moving===id)return;e.preventDefault();move(moving,id,edge(tile,e));moving=null});
+     const body=document.createElement('div');body.className='pronto-host-body';body.appendChild(item.wrap);
+     const grip=document.createElement('div');grip.className='pronto-host-resize';grip.title='Resize panel';
      grip.addEventListener('pointerdown',e=>{
-      e.preventDefault();e.stopPropagation();const x=e.clientX,y=e.clientY,w=tile.getBoundingClientRect().width,h=tile.getBoundingClientRect().height,rowW=rowEl.getBoundingClientRect().width;
+      e.preventDefault();e.stopPropagation();const x=e.clientX,y=e.clientY,r=tile.getBoundingClientRect(),rr=row.getBoundingClientRect();
       grip.setPointerCapture(e.pointerId);
-      function resize(ev){
-       sizes[id]={height:Math.max(130,Math.min(1500,h+ev.clientY-y)),width:Math.max(15,Math.min(300,100*(w+ev.clientX-x)/rowW))};
-       tile.style.height=sizes[id].height+'px';
-       tile.style.flex=sizes[id].width+' 1 0%';
-      }
-      function done(){grip.removeEventListener('pointermove',resize);grip.removeEventListener('pointerup',done);grip.removeEventListener('pointercancel',done);save();render()}
+      const resize=ev=>{sizes[id]={height:Math.max(140,Math.min(1500,r.height+ev.clientY-y)),width:Math.max(10,Math.min(350,(r.width+ev.clientX-x)/rr.width*100))};tile.style.height=sizes[id].height+'px';tile.style.flex=sizes[id].width+' 1 0'};
+      const done=()=>{grip.removeEventListener('pointermove',resize);grip.removeEventListener('pointerup',done);grip.removeEventListener('pointercancel',done);save();render()};
       grip.addEventListener('pointermove',resize);grip.addEventListener('pointerup',done);grip.addEventListener('pointercancel',done);
      });
-     tile.append(handle,content,grip);rowEl.appendChild(tile);
-    });
-    root.appendChild(rowEl);
-   });
+     tile.append(handle,body,grip);row.appendChild(tile);
+    }
+    grid.appendChild(row);
+   }
   }
-  function close(){
-   for(const {el,marker} of originals.values())marker.parentNode.insertBefore(el,marker.nextSibling);
-   workspace.hidden=true;open.hidden=false;
-  }
-  open.onclick=()=>{setup();workspace.hidden=false;open.hidden=true;render()};
-  workspace.querySelector('#hostLayoutClose').onclick=close;
-  workspace.querySelector('#hostLayoutReset').onclick=()=>{rows=[...originals.keys()].map(id=>[id]);sizes={};save();render()};
+  render();
+  dashboard.querySelector('#prontoHostReset').onclick=()=>{rows=ids.map(id=>[id]);sizes={};save();render()};
+  dashboard.querySelector('#prontoHostBoard').onclick=()=>{
+   const hide=!dashboard.hidden;dashboard.hidden=hide;
+   const toggle=document.getElementById('prontoHostReturn');
+   if(toggle)toggle.hidden=!hide;
+  };
+  const back=document.createElement('button');back.id='prontoHostReturn';back.textContent='☷ Host Panels';back.hidden=true;
+  back.style.cssText='position:fixed;right:15px;top:12px;z-index:1800;background:#ffcf58;color:#102342;border:0;border-radius:9px;padding:12px;font-weight:850;cursor:pointer';
+  back.onclick=()=>{dashboard.hidden=false;back.hidden=true};document.body.appendChild(back);
  }
 }
 
