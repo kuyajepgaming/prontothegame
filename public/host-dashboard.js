@@ -1,6 +1,7 @@
 (function(){
 'use strict';
-if(!new URLSearchParams(location.search).has('host'))return;
+const viewParams=new URLSearchParams(location.search);
+if(!viewParams.has('host')||viewParams.get('view')==='player')return;
 function init(){
  if(document.getElementById('prontoFixedHost'))return;
  const sidebar=document.querySelector('.sidebar');if(!sidebar)return;
