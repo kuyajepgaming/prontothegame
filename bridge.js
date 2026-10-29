@@ -172,16 +172,62 @@ if(isHost){
   function save(){try{localStorage.setItem(storageKey,JSON.stringify({rows,sizes}))}catch(e){}}
   function setup(){
    if(initialized)return;initialized=true;
-   [...sidebar.children].filter(el=>el.nodeType===1).forEach((el,i)=>{
-    const id='panel-'+i,marker=document.createComment(id);
-    el.parentNode.insertBefore(marker,el);
-    const heading=el.querySelector('h2,h3,h4,legend,.panel-title');
-    originals.set(id,{el,marker,title:(heading?.textContent||el.id||'Host Controls '+(i+1)).trim().slice(0,70)});
+   // Split the existing sidebar at its section headings, keeping each control's
+   // original DOM node and attached event handlers. The lobby is its own panel.
+   const getHeading=el=>{
+    if(el.matches?.('h1,h2,h3,h4,legend,.panel-title,.section-title'))return el;
+    const first=el.querySelector?.('h2,h3,h4,legend,.panel-title,.section-title');
+    return first&&first.parentElement===el?first:null;
+   };
+   const titleFor=(el)=>getHeading(el)?.textContent?.trim()||'';
+   const normalize=s=>s.replace(/\s+/g,' ').trim();
+   let items=[...sidebar.children].filter(el=>el.nodeType===1);
+   // Some host versions wrap all controls in a single vertical container.
+   if(items.length===1 && items[0].children.length>2 &&
+      getComputedStyle(items[0]).display!=='grid'){
+    const wrapper=items[0];
+    if([...wrapper.children].some(ch=>getHeading(ch)))items=[...wrapper.children];
+   }
+   const groups=[];let active=null;
+   const newGroup=(title)=>{active={title:normalize(title),nodes:[]};groups.push(active)};
+   for(const el of items){
+    const heading=titleFor(el);
+    const isSection=/^LIVE ONLINE LOBBY$/i.test(heading) ||
+      /^(OPENING SCREEN|QUESTION VISIBILITY|QUESTION PICKER|ROUND|SCORING|TEAM|TIMER|STRIKE|BUZZER|GAME|ANSWER|SETTINGS|CONTROLS)/i.test(heading);
+    if(isSection || (heading && groups.length))newGroup(heading);
+    else if(!active)newGroup(heading||'General Host Controls');
+    active.nodes.push(el);
+   }
+   // A heading and the controls immediately after it form one draggable panel.
+   // If a section wrapper includes several heading-led sections, split its direct
+   // children rather than treating the entire wrapper as one undifferentiated panel.
+   const expanded=[];
+   for(const group of groups){
+    if(group.nodes.length!==1){expanded.push(group);continue}
+    const wrapper=group.nodes[0],children=[...wrapper.children];
+    const headings=children.map(titleFor).filter(Boolean);
+    if(headings.length<2){expanded.push(group);continue}
+    let sub=null;
+    for(const node of children){
+     const label=titleFor(node);
+     if(label){sub={title:normalize(label),nodes:[]};expanded.push(sub)}
+     else if(!sub){sub={title:group.title,nodes:[]};expanded.push(sub)}
+     sub.nodes.push(node);
+    }
+   }
+   expanded.filter(g=>g.nodes.length).forEach((group,i)=>{
+    const title=group.title||'Host Controls '+(i+1);
+    const id='panel-'+i;
+    const first=group.nodes[0],marker=document.createComment(id);
+    first.parentNode.insertBefore(marker,first);
+    const container=document.createElement('section');container.className='host-control-group';
+    for(const node of group.nodes)container.appendChild(node);
+    originals.set(id,{el:container,marker,title});
    });
    const ids=[...originals.keys()];
    try{
     const saved=JSON.parse(localStorage.getItem(storageKey)||'{}'),seen=new Set();
-    rows=(saved.rows||[]).map(row=>Array.isArray(row)?row.filter(id=>ids.includes(id)&&!seen.has(id)&&seen.add(id)):[]).filter(row=>row.length);
+    rows=(Array.isArray(saved.rows)?saved.rows:[]).map(row=>Array.isArray(row)?row.filter(id=>ids.includes(id)&&!seen.has(id)&&seen.add(id)):[]).filter(row=>row.length);
     if(saved.sizes&&typeof saved.sizes==='object')sizes=saved.sizes;
    }catch(e){}
    ids.filter(id=>!rows.some(row=>row.includes(id))).forEach(id=>rows.push([id]));
