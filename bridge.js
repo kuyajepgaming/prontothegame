@@ -167,9 +167,8 @@ if(isHost){
   document.head.appendChild(css);
   const dashboard=document.createElement('div');dashboard.id='prontoHostDashboard';
   dashboard.innerHTML='<div id="prontoHostHeader"><strong>☷ Pronto Host Control Panel</strong><div style="display:flex;gap:8px;flex-wrap:wrap"><button id="prontoHostBoard">Show Game Board</button><button id="prontoHostReset">Reset Panel Layout</button></div></div><p style="color:#b9c9e9;margin:10px 2px">Drag panel headers to arrange. Drop on the left/right side to share a row or on the top/bottom to create a full-width row. Resize with the gold bottom-right corner. Layout saves automatically.</p><div id="prontoHostGrid"></div>';
-  // Put the dashboard INSIDE the sidebar so existing delegated sidebar events still work.
-  sidebar.appendChild(dashboard);
-  // Fixed positioning allows full-screen layout even inside a narrow sidebar.
+  // Mount at document level: sidebar transforms/layout must never hide or clip the dashboard.
+  document.body.appendChild(dashboard);
   const grid=dashboard.querySelector('#prontoHostGrid'),panels=new Map(),key='pronto-host-dashboard-v3';
   let rows=[],sizes={},moving=null;
   function addPanel(nodes,label){
@@ -184,7 +183,7 @@ if(isHost){
   // sidebar and one-level nested containers with multiple headings.
   function heading(node){
    if(!node||node.nodeType!==1)return'';
-   if(node.matches('h1,h2,h3,h4,legend'))return(node.textContent||'').trim();
+   if(node.matches('h1,h2,h3,h4,legend,.section-title,.panel-title'))return(node.textContent||'').trim();
    return'';
   }
   function split(container){
@@ -211,6 +210,8 @@ if(isHost){
   }
   // Split the entire host sidebar by actual headings and existing sections.
   split(sidebar);
+  // The host workspace is always visible; the legacy narrow sidebar is not the host panel.
+  // Original control elements are moved (not cloned), retaining their event listeners.
   const ids=[...panels.keys()];const seen=new Set();
   try{const saved=JSON.parse(localStorage.getItem(key)||'{}');
    rows=(Array.isArray(saved.rows)?saved.rows:[]).map(row=>Array.isArray(row)?row.filter(id=>ids.includes(id)&&!seen.has(id)&&seen.add(id)):[]).filter(row=>row.length);
@@ -258,6 +259,7 @@ if(isHost){
    }
   }
   render();
+  dashboard.hidden=false;
   dashboard.querySelector('#prontoHostReset').onclick=()=>{rows=ids.map(id=>[id]);sizes={};save();render()};
   dashboard.querySelector('#prontoHostBoard').onclick=()=>{
    const hide=!dashboard.hidden;dashboard.hidden=hide;
