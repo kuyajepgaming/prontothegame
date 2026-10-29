@@ -198,26 +198,19 @@ if(isHost){
     if(directHeaders.length>=2){
      flush();split(node);continue;
     }
-    if(directHeaders.length===1 && children.length===1){flush();split(node);continue}
-    if(!current.length)title=node.querySelector('h2,h3,h4')?.textContent?.trim()||node.id||'Host Controls';
+    const headingInside=node.querySelector('h2,h3,h4,legend');
+    if(headingInside){
+     flush();
+     addPanel([node],node.id==='onlineLobby'?'LIVE ONLINE LOBBY':headingInside.textContent.trim());
+     continue;
+    }
+    if(!current.length)title=node.id||'General Host Controls';
     current.push(node);
    }
    flush();
   }
-  // Use a stable top-level section for Live Lobby and Live Buzzers.
-  const fixedGroups=[...sidebar.children].filter(n=>n!==dashboard);
-  fixedGroups.forEach(node=>{
-   if(node.id==='onlineLobby'){addPanel([node],'LIVE ONLINE LOBBY')}
-   else if(node.querySelectorAll('h2,h3,h4').length>1){split(node)}
-   else if(node.classList.contains('sidebar-group')||node.classList.contains('panel')){addPanel([node],node.querySelector('h2,h3,h4')?.textContent?.trim()||'Host Controls')}
-  });
-  const remaining=[...sidebar.children].filter(node=>node!==dashboard&&!([...panels.values()].some(p=>p.wrap===node)));
-  // Existing wrappers whose children were extracted may still contain other controls.
-  remaining.forEach(node=>{
-   if(node.matches('section')&&!node.children.length)return;
-   if(node.querySelectorAll('h2,h3,h4').length>=2)split(node);
-   else if(node!==dashboard&&!node.closest('.pronto-host-body')&&node.childNodes.length)addPanel([node],heading(node)||node.querySelector('h2,h3,h4')?.textContent?.trim()||node.id||'Other Host Controls');
-  });
+  // Split the entire host sidebar by actual headings and existing sections.
+  split(sidebar);
   const ids=[...panels.keys()];const seen=new Set();
   try{const saved=JSON.parse(localStorage.getItem(key)||'{}');
    rows=(Array.isArray(saved.rows)?saved.rows:[]).map(row=>Array.isArray(row)?row.filter(id=>ids.includes(id)&&!seen.has(id)&&seen.add(id)):[]).filter(row=>row.length);
