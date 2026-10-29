@@ -98,6 +98,26 @@ function init(){
     if(!editing||!drag||drag===id)return;e.preventDefault();const target=positions[id];
     const rect=tile.getBoundingClientRect(),x=(e.clientX-rect.left)/rect.width,y=(e.clientY-rect.top)/rect.height;
     const source=positions[drag];
+    if(y>=.25&&y<=.75&&(x<.33||x>.67)){
+     // Two full-width panels can be split into equal columns by a side drop.
+     const half=Math.max(1,Math.floor(target.w/2));
+     if(target.w>=2){
+      if(x<.33){
+       positions[id]={...target,c:target.c+half,w:target.w-half};
+       positions[drag]={c:target.c,r:target.r,w:half,h:source.h};
+      }else{
+       positions[id]={...target,w:half};
+       positions[drag]={c:target.c+half,r:target.r,w:target.w-half,h:source.h};
+      }
+      // Repair collisions with any other panels.
+      for(const other of all){
+       if(other===id||other===drag)continue;
+       const p=positions[other];if(p&&occupied(other,p.c,p.r,p.w,p.h))
+        positions[other]=vacancy(other,p.w,p.h,1,target.r+Math.max(target.h,source.h));
+      }
+      save();draw();drag=null;return;
+     }
+    }
     const c=x<.33?Math.max(1,target.c-source.w):x>.67?target.c+target.w:target.c;
     const r=y<.25?Math.max(1,target.r-source.h):y>.75?target.r+target.h:target.r;
     relocate(drag,c,r);drag=null;
