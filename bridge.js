@@ -48,21 +48,33 @@ function paintPlayerTeamNames(names){
  if(paintingTeamLabels)return;
  paintingTeamLabels=true;
  try{
-  const skip='SCRIPT,STYLE,TEXTAREA,INPUT,OPTION';
   const walker=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);
-  const nodes=[];let node;
+  const changes=[];let node;
   while((node=walker.nextNode())){
-   const el=node.parentElement;if(!el||el.closest('#liveTeamManagement')||skip.includes(el.tagName))continue;
-   const value=node.textContent.trim();
-   const index=baseTeamLabels.findIndex((name,i)=>value===name||value===next[i]||value===el.dataset.prontoPreviousTeamName);
-   if(index>=0&&value!==next[index])nodes.push([node,next[index]]);
+   const el=node.parentElement;
+   if(!el||el.closest('#liveTeamManagement,script,style,textarea,option')||el.closest('#ph-dashboard .ph-bar'))continue;
+   const value=node.nodeValue;
+   if(!value||!baseTeamLabels.some((s,i)=>value.includes(s)||value.includes(next[i])))continue;
+   // Each node keeps its original wording, so later game re-renders and
+   // subsequent renames cannot leave stale team names behind.
+   if(node._prontoTeamSource===undefined)node._prontoTeamSource=value;
+   let output=node._prontoTeamSource;
+   baseTeamLabels.forEach((name,i)=>{output=output.split(name).join(next[i])});
+   // If a panel was originally created while custom names were active,
+   // allow it to follow further renames as well.
+   if(output===node._prontoTeamSource&&!baseTeamLabels.some(name=>output.includes(name))){
+    const old=node._prontoLastNames||baseTeamLabels;
+    old.forEach((name,i)=>{output=output.split(name).join(next[i])});
+   }
+   if(value!==output)changes.push([node,output]);
+   node._prontoLastNames=next.slice();
   }
-  nodes.forEach(([node,value])=>{node.parentElement.dataset.prontoPreviousTeamName=node.textContent.trim();node.textContent=value});
+  changes.forEach(([node,value])=>{node.nodeValue=value});
  }finally{paintingTeamLabels=false}
 }
 
 const socket=io({reconnection:true});let lobby=[];
-if(!isHost){const observer=new MutationObserver(()=>{if(!paintingTeamLabels)paintPlayerTeamNames(syncedTeamLabels)});observer.observe(document.body,{childList:true,subtree:true,characterData:true});}
+{const observer=new MutationObserver(()=>{if(!paintingTeamLabels)paintPlayerTeamNames(isHost&&Array.isArray(state?.teamNames)?state.teamNames:syncedTeamLabels)});observer.observe(document.body,{childList:true,subtree:true,characterData:true});}
 
 const playerKey='pronto-room-'+room, registeredPlayerId=!isHost?localStorage.getItem(playerKey):null;
 const personalPlayer=!isHost&&!!registeredPlayerId;
@@ -99,22 +111,7 @@ if(isHost){
   });
  }
  // Keep all host scoring labels and player scoreboard titles in sync with team renames.
- function updateTeamLabels(names){
-  const aliases=['Team Pronto','Team Pilates'];
-  document.querySelectorAll('button').forEach(button=>{
-   if(button.closest('#liveTeamManagement'))return;
-   const original=button.dataset.prontoOriginalLabel||button.textContent.trim();
-   if(!button.dataset.prontoOriginalLabel&&aliases.some(n=>original.includes(n)))button.dataset.prontoOriginalLabel=original;
-   const base=button.dataset.prontoOriginalLabel;
-   if(base){let next=base;aliases.forEach((name,i)=>{next=next.replaceAll(name,names[i])});button.textContent=next}
-  });
-  document.querySelectorAll('.scoreboard, .team-score, .team-name, .team-header, [id*=teamName], [id*=teamLabel]').forEach(el=>{
-   if(el.closest('#liveTeamManagement')||el.children.length)return;
-   const base=el.dataset.prontoOriginalLabel||el.textContent.trim();
-   if(!el.dataset.prontoOriginalLabel&&aliases.includes(base))el.dataset.prontoOriginalLabel=base;
-   if(el.dataset.prontoOriginalLabel){const i=aliases.indexOf(el.dataset.prontoOriginalLabel);if(i>=0)el.textContent=names[i]}
-  });
- }
+ function updateTeamLabels(names){paintPlayerTeamNames(names)}
  document.getElementById('liveSaveTeamNames').onclick=()=>{
   const names=[0,1].map(i=>document.getElementById('liveTeamName'+i).value.trim().slice(0,45)||('Team '+(i+1)));
   state.teamNames=names;
