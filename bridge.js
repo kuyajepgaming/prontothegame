@@ -72,12 +72,29 @@ if(isHost){
    });roster.appendChild(group);
   });
  }
+ // Keep all host scoring labels and player scoreboard titles in sync with team renames.
+ function updateTeamLabels(names){
+  const aliases=['Team Pronto','Team Pilates'];
+  document.querySelectorAll('button').forEach(button=>{
+   if(button.closest('#liveTeamManagement'))return;
+   const original=button.dataset.prontoOriginalLabel||button.textContent.trim();
+   if(!button.dataset.prontoOriginalLabel&&aliases.some(n=>original.includes(n)))button.dataset.prontoOriginalLabel=original;
+   const base=button.dataset.prontoOriginalLabel;
+   if(base){let next=base;aliases.forEach((name,i)=>{next=next.replaceAll(name,names[i])});button.textContent=next}
+  });
+  document.querySelectorAll('.scoreboard, .team-score, .team-name, .team-header, [id*=teamName], [id*=teamLabel]').forEach(el=>{
+   if(el.closest('#liveTeamManagement')||el.children.length)return;
+   const base=el.dataset.prontoOriginalLabel||el.textContent.trim();
+   if(!el.dataset.prontoOriginalLabel&&aliases.includes(base))el.dataset.prontoOriginalLabel=base;
+   if(el.dataset.prontoOriginalLabel){const i=aliases.indexOf(el.dataset.prontoOriginalLabel);if(i>=0)el.textContent=names[i]}
+  });
+ }
  document.getElementById('liveSaveTeamNames').onclick=()=>{
   const names=[0,1].map(i=>document.getElementById('liveTeamName'+i).value.trim().slice(0,45)||('Team '+(i+1)));
   state.teamNames=names;
   // Update common legacy team-name shapes so scoreboard and shared state use the same names.
   if(Array.isArray(state.teams)&&state.teams.every(x=>typeof x==='string'))state.teams=[...names];
-  render();paint();broadcast();
+  render();paint();updateTeamLabels(names);broadcast();
  };
  document.getElementById('roomCode').textContent='Room: '+room;
  const joinUrl=location.origin+'/join/'+room;
@@ -86,7 +103,7 @@ if(isHost){
  document.getElementById('copyDisplay').onclick=()=>{const url=location.origin+'/game?room='+room+'&view=player';navigator.clipboard?.writeText(url).then(()=>toast('Display link copied')).catch(()=>prompt('Copy link:',url))};
  function pool(){ensureTeamState();const taken=new Set(state.players.flat().map(p=>p.id));return lobby.filter(p=>!taken.has(p.id))}
  function assign(id,t){const p=lobby.find(x=>x.id===id);if(!p)return;ensureTeamState();for(const arr of state.players){const j=arr.findIndex(x=>x.id===id);if(j>=0)arr.splice(j,1)}state.players[t].push({id:p.id,name:p.name});render();showTeamCreator();paint();}
- function paint(){ensureTeamState();const names=teamNames();[0,1].forEach(i=>{const input=document.getElementById('liveTeamName'+i);if(input&&document.activeElement!==input)input.value=names[i]});paintRoster();const unassigned=pool();document.getElementById('joinedCount').textContent=`${lobby.length} joined · ${unassigned.length} unassigned · ${lobby.filter(p=>p.connected).length} online`;
+ function paint(){ensureTeamState();const names=teamNames();updateTeamLabels(names);[0,1].forEach(i=>{const input=document.getElementById('liveTeamName'+i);if(input&&document.activeElement!==input)input.value=names[i]});paintRoster();const unassigned=pool();document.getElementById('joinedCount').textContent=`${lobby.length} joined · ${unassigned.length} unassigned · ${lobby.filter(p=>p.connected).length} online`;
  document.getElementById('livePool').innerHTML=unassigned.length?unassigned.map(p=>`<div style="padding:8px;border-bottom:1px solid #36517c;display:flex;align-items:center;gap:5px;flex-wrap:wrap"><span style="flex:1;min-width:85px">${escapeHTML(p.name)} ${p.connected?'●':'○'}</span><button class="btn" data-pool="${p.id}" data-team="0" title="Assign to Team 1">Team 1</button><button class="btn" data-pool="${p.id}" data-team="1" title="Assign to Team 2">Team 2</button><button class="btn danger" data-kick="${p.id}" title="Remove from room">×</button></div>`).join(''):'<div style="font-size:13px;color:#b7c4e5">No unassigned players.</div>';
  document.querySelectorAll('[data-pool]').forEach(b=>b.onclick=()=>assign(b.dataset.pool,+b.dataset.team));document.querySelectorAll('[data-kick]').forEach(b=>b.onclick=()=>{if(confirm('Remove this player?'))socket.emit('kick',{id:b.dataset.kick})});
  }
@@ -102,7 +119,15 @@ if(isHost){
 }else{
  // The online player display is output-only even if opened on another computer.
  const switchBtn=document.getElementById('switchViewBtn');if(switchBtn)switchBtn.style.display='none';
- socket.on('gameSync',d=>receiveSync(d));socket.on('gameStrike',d=>showStrike(d.count));
+ socket.on('gameSync',d=>{receiveSync(d);const names=d?.state?.teamNames;if(Array.isArray(names)&&names.length>=2){
+   const aliases=['Team Pronto','Team Pilates'];
+   document.querySelectorAll('button,.team-name,.team-header,[id*=teamName],[id*=teamLabel]').forEach(el=>{
+    if(el.children.length)return;
+    const base=el.dataset.prontoOriginalLabel||el.textContent.trim();
+    if(!el.dataset.prontoOriginalLabel&&aliases.some(n=>base.includes(n)))el.dataset.prontoOriginalLabel=base;
+    if(el.dataset.prontoOriginalLabel){let s=el.dataset.prontoOriginalLabel;aliases.forEach((v,i)=>s=s.replaceAll(v,String(names[i])));el.textContent=s}
+   });
+  }});socket.on('gameStrike',d=>showStrike(d.count));
 }
 
 // Distinct, short game-show buzzer. Sounds only for accepted server buzzes.
