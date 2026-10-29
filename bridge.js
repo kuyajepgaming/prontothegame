@@ -255,6 +255,38 @@ dock.style.clear='both';
 
 // Host dashboard is now loaded independently by server.js, after the game DOM.
 
+// Keep legacy Manual Scoring working after its controls are moved into host cards.
+// The game handler gets first chance to score; fallback only applies if it did nothing.
+if(isHost){
+ function scoreArray(){
+  if(Array.isArray(state.scores)&&state.scores.length>=2)return state.scores;
+  if(Array.isArray(state.teamScores)&&state.teamScores.length>=2)return state.teamScores;
+  return null;
+ }
+ document.addEventListener('click',event=>{
+  const btn=event.target.closest?.('button');
+  if(!btn||!/^\\s*\\+?\\s*Points to\\s+/i.test(btn.textContent||''))return;
+  const all=[...document.querySelectorAll('button')].filter(b=>/^\\s*\\+?\\s*Points to\\s+/i.test(b.textContent||''));
+  const index=all.indexOf(btn);
+  if(index!==0&&index!==1)return;
+  const before=scoreArray()?.map(Number);
+  if(!before)return;
+  const panel=btn.closest('.ph-card')||btn.closest('section')||btn.parentElement?.parentElement;
+  const fields=[...(panel?.querySelectorAll('input[type=number],input:not([type]),input[type=text]')||[])];
+  const input=fields.find(el=>el.offsetParent!==null&&/^[-+]?\\d+(?:\\.\\d+)?$/.test(el.value.trim()));
+  const points=input?Number(input.value):NaN;
+  if(!Number.isFinite(points)||points<=0)return;
+  setTimeout(()=>{
+   const scores=scoreArray();
+   if(!scores||Number(scores[index])!==before[index])return;
+   const next=Math.max(0,Math.round(Number(scores[index]||0)+points));
+   scores[index]=next;
+   render();
+   broadcast();
+  },0);
+ },true);
+}
+
 socket.on('buzzerState',b=>{soundOnNewBuzz(b);updateBuzzer(b)});
 socket.on('connect',()=>socket.emit('enter',{room,host:token,view:isHost?'host':personalPlayer?'participant':'display',playerId:personalPlayer?registeredPlayerId:undefined},res=>{
  if(res.error){alert(res.error);return}if(personalPlayer&&!res.playerId){location.replace('/join/'+room);return}if(res.buzzer){soundOnNewBuzz(res.buzzer);updateBuzzer(res.buzzer);if(personalPlayer)window.applyPersonalBuzzer(res.buzzer)}if(!isHost&&res.snapshot){receiveSync(res.snapshot);paintPlayerTeamNames(res.snapshot?.state?.teamNames)}if(isHost)broadcast();
