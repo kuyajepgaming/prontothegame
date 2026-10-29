@@ -93,23 +93,17 @@ function init(){
    if(el!==visibilityCard.querySelector('.ph-inner')&&!el.children.length&&!el.textContent.trim())el.remove();
   }
  }
- // Compact controls and fit side columns to the available viewport height.
+ // Reserve the full title/action-button header before positioning the dashboard.
  const compactCSS=document.createElement('style');compactCSS.id='prontoCompactHostStyles';
- compactCSS.textContent="@media(min-width:901px){\nhtml:has(#prontoFixedHost),body:has(#prontoFixedHost){overflow:hidden!important}\n#prontoFixedHost{inset:72px 7px 7px;gap:7px;grid-template-columns:minmax(235px,22%) minmax(0,1fr) minmax(275px,26%)}\n#prontoFixedHost .ph-column{gap:5px;overflow:hidden;min-height:0}\n#prontoFixedHost .ph-card{border-radius:7px}\n#prontoFixedHost .ph-title{padding:5px 8px;font-size:11px;line-height:1.15}\n#prontoFixedHost .ph-inner{padding:5px;font-size:11px;line-height:1.2}\n#prontoFixedHost .ph-inner button,#prontoFixedHost .ph-inner .btn{padding:5px 7px!important;min-height:25px!important;border-radius:6px!important;font-size:11px!important;line-height:1.15!important}\n#prontoFixedHost .ph-inner input,#prontoFixedHost .ph-inner select{padding:4px 6px!important;min-height:26px!important;font-size:11px!important}\n#prontoFixedHost .ph-inner h2,#prontoFixedHost .ph-inner h3,#prontoFixedHost .ph-inner h4{margin:3px 0 4px!important;font-size:12px!important}\n#prontoFixedHost .ph-inner p,#prontoFixedHost .ph-inner small{margin:3px 0!important;font-size:10px!important;line-height:1.2}\n#prontoFixedHost #onlineLobby,#prontoFixedHost #liveTeamManagement{padding:5px!important;margin:0!important}\n#prontoFixedHost #liveTeamRoster{max-height:none!important;overflow:visible!important;gap:5px!important}\n#prontoFixedHost #liveTeamRoster>div{padding:4px!important}\n#prontoFixedHost .ph-inner [style*=\"margin-top:12px\"]{margin-top:4px!important}\n#prontoFixedHost .ph-inner [style*=\"padding:15px\"]{padding:5px!important}\n}\n@media(min-width:901px) and (max-height:750px){#prontoFixedHost{inset:58px 5px 5px}#prontoFixedHost .ph-title{padding:4px 7px}#prontoFixedHost .ph-inner{padding:4px}}";document.head.appendChild(compactCSS);
- function fitDashboard(){
+ compactCSS.textContent="@media(min-width:901px){\n#prontoFixedHost{inset:var(--pronto-host-top,145px) 10px 9px!important;gap:10px!important;grid-template-columns:minmax(270px,23%) minmax(0,1fr) minmax(300px,27%)!important}\n#prontoFixedHost .ph-column{gap:7px;overflow-y:auto!important;scrollbar-width:thin}\n#prontoFixedHost .ph-card{border-radius:9px}\n#prontoFixedHost .ph-title{padding:7px 10px;font-size:12px;line-height:1.25}\n#prontoFixedHost .ph-inner{padding:8px;font-size:12px;line-height:1.3}\n#prontoFixedHost .ph-inner button,#prontoFixedHost .ph-inner .btn{padding:7px 9px!important;min-height:30px!important;font-size:12px!important;line-height:1.2!important}\n#prontoFixedHost .ph-inner input,#prontoFixedHost .ph-inner select{padding:6px 7px!important;min-height:30px!important;font-size:12px!important}\n#prontoFixedHost .ph-inner h2,#prontoFixedHost .ph-inner h3{font-size:13px!important;margin:5px 0!important}\n#prontoFixedHost #onlineLobby,#prontoFixedHost #liveTeamManagement{padding:8px!important}\n#prontoFixedHost #liveTeamRoster{max-height:185px!important;overflow:auto!important}\n}\n@media(min-width:901px) and (max-height:760px){#prontoFixedHost .ph-inner{padding:6px}#prontoFixedHost .ph-column{gap:5px}}\n";document.head.appendChild(compactCSS);
+ function positionBelowHeader(){
   if(window.innerWidth<=900)return;
-  for(const col of [left,right]){
-   const cards=[...col.children].filter(el=>el.classList.contains('ph-card'));
-   cards.forEach(card=>card.style.zoom='1');
-   const available=col.clientHeight,required=col.scrollHeight;
-   if(available>0&&required>available){
-    const factor=Math.max(.66,Math.min(1,(available-8)/required));
-    cards.forEach(card=>card.style.zoom=String(factor));
-   }
-  }
+  const topCandidates=[...document.querySelectorAll('header,.header,.topbar,h1,button')].filter(el=>!root.contains(el)&&el.getBoundingClientRect().top<220&&el.getBoundingClientRect().height>0);
+  const bottom=Math.max(120,...topCandidates.map(el=>el.getBoundingClientRect().bottom).filter(n=>n<280));
+  document.documentElement.style.setProperty('--pronto-host-top',Math.ceil(Math.min(260,bottom+12))+'px');
  }
- requestAnimationFrame(fitDashboard);
- window.addEventListener('resize',()=>requestAnimationFrame(fitDashboard));
+ requestAnimationFrame(positionBelowHeader);
+ window.addEventListener('resize',()=>requestAnimationFrame(positionBelowHeader));
  // A fixed desktop dashboard with independent scrolling inside columns.
  root.querySelectorAll('h1,h2,h3,h4,h5').forEach(h=>{
   if(norm(h.textContent)==='MANUAL SCORE EDITOR'){const panel=h.closest('.ph-card');if(panel)panel.remove()}
