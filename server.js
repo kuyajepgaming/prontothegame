@@ -13,7 +13,7 @@ const clean=x=>String(x||'').trim().replace(/[<>\x00-\x1f]/g,'').slice(0,55);
 const summary=r=>({code:r.code,participants:[...r.players.values()].map(({id,name,connected,team})=>({id,name,connected,team})),hostOnline:!!r.hostSocket});
 function emitBuzzer(r){io.to('room:'+r.code).emit('buzzerState',r.buzzer)}
 function emitLobby(r){io.to('room:'+r.code).emit('lobby',summary(r));}
-app.post('/api/rooms',(req,res)=>{let c=code();while(rooms.has(c))c=code();const token=crypto.randomBytes(32).toString('hex');rooms.set(c,{code:c,token,players:new Map(),hostSocket:null,snapshot:null,buzzer:{open:false,entries:[],startedAt:Date.now()},music:{playing:true,volume:45},created:Date.now()});res.json({code:c,hostUrl:`/game?room=${c}&host=${token}`,joinUrl:`/join/${c}`,displayUrl:`/game?room=${c}&view=player`});});
+app.post('/api/rooms',(req,res)=>{let c=code();while(rooms.has(c))c=code();const token=crypto.randomBytes(32).toString('hex');rooms.set(c,{code:c,token,players:new Map(),hostSocket:null,snapshot:null,buzzer:{open:false,entries:[],startedAt:Date.now()},created:Date.now()});res.json({code:c,hostUrl:`/game?room=${c}&host=${token}`,joinUrl:`/join/${c}`,displayUrl:`/game?room=${c}&view=player`});});
 app.get('/api/rooms/:code',(req,res)=>{const r=rooms.get(req.params.code.toUpperCase());if(!r)return res.status(404).json({error:'Room not found'});res.json({code:r.code,open:true,hostOnline:!!r.hostSocket});});
 app.get('/bridge.js',(req,res)=>res.type('application/javascript').sendFile(path.join(__dirname,'bridge.js')));
 app.get('/join/:code',(req,res)=>res.sendFile(path.join(__dirname,'public','join.html')));
@@ -32,7 +32,7 @@ io.on('connection',socket=>{
    if(previous){playerId=previous.id;previous.connected=true;}
    role='participant';
   }else return ack({error:'Invalid view'});
-  socket.join('room:'+r.code);ack({ok:true,code:r.code,playerId,lobby:summary(r),snapshot:r.snapshot,buzzer:r.buzzer,music:r.music});emitLobby(r);
+  socket.join('room:'+r.code);ack({ok:true,code:r.code,playerId,lobby:summary(r),snapshot:r.snapshot,buzzer:r.buzzer});emitLobby(r);
  });
  socket.on('joinPlayer',({name,previousId}={},ack=()=>{})=>{
   if(!current||role!=='participant')return ack({error:'Not connected to room'});
@@ -59,17 +59,6 @@ io.on('connection',socket=>{
   else if(action==='lock')b.open=false;
   else return ack({error:'Unknown buzzer action'});
   emitBuzzer(current);ack({ok:true});
- });
- socket.on('musicControl',({action,volume}={},ack=()=>{})=>{
-  if(!current||role!=='host'||socket.id!==current.hostSocket)return ack({error:'Host access required'});
-  if(action==='volume'){
-   if(typeof volume!=='number'||!Number.isFinite(volume))return ack({error:'Invalid volume'});
-   current.music.volume=Math.max(0,Math.min(100,Math.round(volume)));
-  }else if(action==='stop')current.music.playing=false;
-  else if(action==='play')current.music.playing=true;
-  else return ack({error:'Unknown music command'});
-  io.to('room:'+current.code).emit('musicState',current.music);
-  ack({ok:true,music:current.music});
  });
  socket.on('sync',data=>{
   if(!current||role!=='host'||socket.id!==current.hostSocket)return;
