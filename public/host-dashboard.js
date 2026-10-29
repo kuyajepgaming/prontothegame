@@ -14,7 +14,7 @@ function init(){
  [left,middle,right].forEach(el=>el.className='ph-column');
  root.append(left,middle,right);document.body.appendChild(root);
  middle.appendChild(main);
- const rules=[['LIVE ONLINE LOBBY',left],['TEAMS & JOINED PLAYERS',left],['LIVE PLAYER BUZZERS',left],['TEAMS & PLAYERS',left],['OPENING SCREEN & QUESTION VISIBILITY',right],['QUESTION PICKER',right],['HOST • REVEAL AN ANSWER',right],['MANUAL SCORING',right],['ROUND TIMER',middle],['CUSTOMIZE GAME',middle],['SAVE & SHARING',right]];
+ const rules=[['LIVE ONLINE LOBBY',left],['TEAMS & JOINED PLAYERS',left],['LIVE PLAYER BUZZERS',left],['OPENING SCREEN & QUESTION VISIBILITY',right],['QUESTION PICKER',right],['HOST • REVEAL AN ANSWER',right],['MANUAL SCORING',right],['ROUND TIMER',middle],['CUSTOMIZE GAME',middle],];
  const norm=x=>String(x||'').replace(/\\s+/g,' ').trim().toUpperCase();
  const find=x=>rules.find(r=>norm(x).startsWith(r[0]));
  function card(name,place,items){if(!items.length)return;const box=document.createElement('section');box.className='ph-card';const title=document.createElement('div');title.className='ph-title';title.textContent=name;const body=document.createElement('div');body.className='ph-inner';items.forEach(n=>body.appendChild(n));box.append(title,body);place.appendChild(box)}
@@ -44,6 +44,47 @@ function init(){
   flush();current=null;
  }
  split(sidebar,0);
+ // Simplify and regroup the actual host controls after the fixed dashboard is built.
+ const allCards=()=>[...root.querySelectorAll('.ph-card')];
+ const namedCard=name=>allCards().find(el=>norm(el.querySelector('.ph-title')?.textContent)===name);
+ const controls=[...root.querySelectorAll('button')];
+ const buttonNamed=part=>controls.find(el=>norm(el.textContent).includes(part));
+ const questionCard=namedCard('QUESTION PICKER');
+ const visibilityCard=namedCard('OPENING SCREEN & QUESTION VISIBILITY');
+ if(questionCard){
+  const questionBody=questionCard.querySelector('.ph-inner');
+  // Move existing buttons, preserving their click handlers.
+  for(const keyword of ['SHOW QUESTION','HIDE QUESTION']){
+   const button=buttonNamed(keyword);
+   if(button){
+    let container=button.parentElement;
+    // Avoid taking an entire section with unrelated title-screen controls.
+    if(container&&[...container.querySelectorAll('button')].every(b=>['SHOW QUESTION','HIDE QUESTION'].some(k=>norm(b.textContent).includes(k)))){
+     questionBody.appendChild(container);
+    }else questionBody.appendChild(button);
+   }
+  }
+ }
+ // Remove obsolete music volume UI (and any vestigial player music controls).
+ root.querySelectorAll('#playerVolume,#musicStatus,#musicPlay,#musicStop,#hostMusicVolume,#hostMusicPanel').forEach(el=>el.remove());
+ for(const el of [...root.querySelectorAll('label,p,small,span')]){
+  if(el.children.length===0&&/background music volume|music is played through youtube|music volume/i.test(el.textContent||''))el.remove();
+ }
+ // Remove legacy Team Creator and the redundant Save & Sharing controls,
+ // leaving roster assignment in Live Online Lobby.
+ for(const card of allCards()){
+  const title=norm(card.querySelector('.ph-title')?.textContent);
+  if(['SAVE & SHARING','TEAMS & PLAYERS','TEAM CREATOR','MANUAL SCORE EDITOR'].includes(title))card.remove();
+ }
+ for(const el of [...root.querySelectorAll('button')]){
+  if(/team creator|open team creator/i.test(el.textContent||''))el.remove();
+ }
+ // Remove empty wrappers left behind by moved controls.
+ if(visibilityCard){
+  for(const el of [...visibilityCard.querySelectorAll('div')]){
+   if(el!==visibilityCard.querySelector('.ph-inner')&&!el.children.length&&!el.textContent.trim())el.remove();
+  }
+ }
  // A fixed desktop dashboard with independent scrolling inside columns.
  root.querySelectorAll('h1,h2,h3,h4,h5').forEach(h=>{
   if(norm(h.textContent)==='MANUAL SCORE EDITOR'){const panel=h.closest('.ph-card');if(panel)panel.remove()}
